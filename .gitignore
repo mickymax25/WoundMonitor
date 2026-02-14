@@ -13,8 +13,8 @@ venv/
 env/
 
 # Data
-data/uploads/
-data/woundchrono.db
+**/data/uploads/
+**/woundchrono.db
 *.db
 
 # Environment
