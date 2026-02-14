@@ -37,9 +37,11 @@ frontend/out/
 .DS_Store
 Thumbs.db
 
-# Model cache
+# Model cache (HuggingFace weights, not source code)
 .cache/
-models/
+/models/
+*.bin
+*.safetensors
 
 # Logs
 *.log

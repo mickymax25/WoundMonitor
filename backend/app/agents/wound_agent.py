@@ -148,18 +148,21 @@ class WoundAgent:
         if assessment is None:
             raise ValueError(f"Assessment {assessment_id} not found.")
         patient_id = assessment["patient_id"]
-        previous = self.db.get_latest_assessment(patient_id, exclude_id=assessment_id)
+        current_date = assessment["visit_date"]
+        previous = self.db.get_latest_assessment(
+            patient_id, exclude_id=assessment_id, before_date=current_date
+        )
 
         # Step 4: Compute change score and trajectory
         change_score: float | None = None
         trajectory = "baseline"
         if previous and previous.get("embedding"):
-            logger.info("Step 4: Computing trajectory against previous assessment.")
+            logger.info("Step 4: Computing trajectory against previous visit (%s).", previous["visit_date"][:10])
             prev_embedding = np.frombuffer(previous["embedding"], dtype=np.float32)
             change_score = float(cosine_distance(embedding, prev_embedding))
             trajectory = _compute_trajectory(time_scores, previous, change_score)
         else:
-            logger.info("Step 4: No previous assessment — marking as baseline.")
+            logger.info("Step 4: No previous analyzed assessment — marking as baseline.")
 
         # Step 5: Audio transcription (optional)
         nurse_notes: str | None = None

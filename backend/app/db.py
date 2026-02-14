@@ -218,21 +218,38 @@ def update_assessment(assessment_id: str, data: dict[str, Any]) -> dict[str, Any
 
 
 def get_latest_assessment(
-    patient_id: str, *, exclude_id: str | None = None
+    patient_id: str,
+    *,
+    exclude_id: str | None = None,
+    before_date: str | None = None,
 ) -> dict[str, Any] | None:
+    """Return the most recent analyzed assessment for a patient.
+
+    If *before_date* is given, only considers assessments with visit_date < before_date.
+    If *exclude_id* is given, excludes that assessment by id.
+    Only returns assessments that have an embedding (i.e. have been analyzed).
+    """
     conn = get_db()
     try:
+        conditions = ["patient_id = ?"]
+        params: list[Any] = [patient_id]
+
         if exclude_id:
-            row = conn.execute(
-                "SELECT * FROM assessments WHERE patient_id = ? AND id != ? "
-                "ORDER BY visit_date DESC LIMIT 1",
-                (patient_id, exclude_id),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT * FROM assessments WHERE patient_id = ? ORDER BY visit_date DESC LIMIT 1",
-                (patient_id,),
-            ).fetchone()
+            conditions.append("id != ?")
+            params.append(exclude_id)
+
+        if before_date:
+            conditions.append("visit_date < ?")
+            params.append(before_date)
+
+        # Only consider assessments that have been analyzed (have embedding)
+        conditions.append("embedding IS NOT NULL")
+
+        where = " AND ".join(conditions)
+        row = conn.execute(
+            f"SELECT * FROM assessments WHERE {where} ORDER BY visit_date DESC LIMIT 1",
+            params,
+        ).fetchone()
         return _row_to_dict(row)
     finally:
         conn.close()
