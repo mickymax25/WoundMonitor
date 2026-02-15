@@ -149,15 +149,19 @@ export function TimeScoreCard({ dimension, data }: TimeScoreCardProps) {
           </span>
         </div>
 
-        {/* Healing bar */}
-        <div className="rounded-full h-1 w-full bg-muted">
+        {/* Healing bar with scale endpoints */}
+        <div className="rounded-full h-1.5 w-full bg-muted">
           <div
             className={cn(
-              "rounded-full h-1 transition-all duration-700 ease-out",
+              "rounded-full h-1.5 transition-all duration-700 ease-out",
               barColor(data.score),
             )}
             style={{ width: `${percent}%` }}
           />
+        </div>
+        <div className="flex justify-between mt-1">
+          <span className="text-[9px] text-muted-foreground/40">Critical</span>
+          <span className="text-[9px] text-muted-foreground/40">Healed</span>
         </div>
       </div>
     </div>

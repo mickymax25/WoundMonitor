@@ -524,6 +524,10 @@ export function ReportPanel({
       </div>
 
       {/* TIME Assessment — 2x2 grid */}
+      <div className="flex items-center justify-between mb-1 px-1">
+        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">TIME Assessment</span>
+        <span className="text-[10px] text-muted-foreground/50">Scale: 1 (critical) → 10 (healed)</span>
+      </div>
       <div className="grid grid-cols-2 gap-3">
         {(
           Object.keys(
