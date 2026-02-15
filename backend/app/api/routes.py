@@ -235,6 +235,15 @@ def analyze_assessment(assessment_id: str) -> AnalysisResult:
     )
 
 
+@router.get("/patients/{patient_id}/assessments", response_model=list[AssessmentResponse])
+def list_patient_assessments(patient_id: str) -> list[AssessmentResponse]:
+    patient = db.get_patient(patient_id)
+    if patient is None:
+        raise HTTPException(status_code=404, detail="Patient not found.")
+    assessments = db.get_patient_assessments(patient_id)
+    return [_assessment_to_response(a) for a in assessments]
+
+
 @router.get("/assessments/{assessment_id}", response_model=AssessmentResponse)
 def get_assessment(assessment_id: str) -> AssessmentResponse:
     assessment = db.get_assessment(assessment_id)

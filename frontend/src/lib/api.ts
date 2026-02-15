@@ -109,4 +109,12 @@ export async function getTrajectory(
   );
 }
 
+export async function listPatientAssessments(
+  patientId: string
+): Promise<AssessmentResponse[]> {
+  return request<AssessmentResponse[]>(
+    `/api/v1/patients/${patientId}/assessments`
+  );
+}
+
 export { ApiError };

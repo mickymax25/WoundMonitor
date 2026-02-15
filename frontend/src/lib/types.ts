@@ -100,4 +100,4 @@ export const WOUND_LOCATIONS: { value: WoundLocation; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-export type MobileTab = "patients" | "assessment" | "timeline" | "report";
+export type MobileTab = "patients" | "capture" | "reports";

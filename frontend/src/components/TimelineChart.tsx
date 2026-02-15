@@ -28,10 +28,10 @@ interface TimelineChartProps {
 }
 
 const SERIES = [
-  { key: "tissue_score", name: "Tissue", color: "#10b981" },
-  { key: "inflammation_score", name: "Inflammation", color: "#f59e0b" },
-  { key: "moisture_score", name: "Moisture", color: "#14b8a6" },
-  { key: "edge_score", name: "Edge", color: "#a855f7" },
+  { key: "tissue_score", name: "Tissue", color: "#059669" },
+  { key: "inflammation_score", name: "Inflammation", color: "#d97706" },
+  { key: "moisture_score", name: "Moisture", color: "#0891b2" },
+  { key: "edge_score", name: "Edge", color: "#7c3aed" },
 ] as const;
 
 interface CustomTooltipProps {
@@ -48,7 +48,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
 
   return (
-    <div className="bg-card border border-border rounded-xl p-3 shadow-xl shadow-black/20">
+    <div className="bg-card border border-border rounded-xl p-3 shadow-lg">
       <p className="text-xs text-muted-foreground mb-2 font-medium">{label}</p>
       <div className="space-y-1.5">
         {payload.map((entry) => (
@@ -61,7 +61,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
                 className="w-2.5 h-2.5 rounded-full"
                 style={{ backgroundColor: entry.color }}
               />
-              <span className="text-foreground/80">{entry.name}</span>
+              <span className="text-foreground/70">{entry.name}</span>
             </span>
             <span className="font-mono font-semibold text-foreground">
               {(entry.value * 100).toFixed(0)}%
@@ -80,7 +80,7 @@ function trajectoryIcon(trajectory: string | null) {
     case "deteriorating":
       return <TrendingDown className="h-3 w-3 text-rose-400" />;
     case "stable":
-      return <Minus className="h-3 w-3 text-amber-400" />;
+      return <Minus className="h-3 w-3 text-sky-400" />;
     default:
       return null;
   }
@@ -89,11 +89,11 @@ function trajectoryIcon(trajectory: string | null) {
 function trajectoryBorderColor(trajectory: string | null): string {
   switch (trajectory) {
     case "improving":
-      return "border-emerald-500/40";
+      return "border-emerald-500/30";
     case "deteriorating":
-      return "border-rose-500/40";
+      return "border-rose-500/30";
     case "stable":
-      return "border-amber-500/40";
+      return "border-sky-500/30";
     default:
       return "border-border";
   }
@@ -132,7 +132,7 @@ export function TimelineChart({
   }));
 
   return (
-    <Card className="h-full flex flex-col border-border/60 shadow-lg shadow-black/10">
+    <Card className="h-full flex flex-col border-border shadow-sm">
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2 font-semibold">
           <Activity className="h-4 w-4 text-primary" />
@@ -142,18 +142,18 @@ export function TimelineChart({
       <CardContent className="flex-1 min-h-0">
         {loading ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3">
-            <div className="w-12 h-12 rounded-xl bg-accent/50 flex items-center justify-center border border-border">
+            <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center border border-border">
               <Loader2 className="h-6 w-6 animate-spin text-primary/60" />
             </div>
             <p className="text-xs text-muted-foreground">Loading trajectory...</p>
           </div>
         ) : error ? (
-          <p className="text-sm text-red-400 text-center py-8">
+          <p className="text-sm text-rose-400 text-center py-8">
             {error}
           </p>
         ) : data.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
-            <div className="w-14 h-14 rounded-xl bg-accent/50 flex items-center justify-center mb-3 border border-border">
+            <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center mb-3 border border-border">
               <Activity className="h-7 w-7 opacity-40" />
             </div>
             <p className="text-sm font-medium">No assessment data yet</p>
@@ -171,7 +171,7 @@ export function TimelineChart({
                     className="w-2.5 h-2.5 rounded-full"
                     style={{ backgroundColor: s.color }}
                   />
-                  <span className="text-[10px] text-muted-foreground font-medium">
+                  <span className="text-xs text-muted-foreground font-medium">
                     {s.name}
                   </span>
                 </div>
@@ -198,7 +198,7 @@ export function TimelineChart({
                         <stop
                           offset="0%"
                           stopColor={s.color}
-                          stopOpacity={0.3}
+                          stopOpacity={0.2}
                         />
                         <stop
                           offset="100%"
@@ -210,20 +210,20 @@ export function TimelineChart({
                   </defs>
                   <CartesianGrid
                     strokeDasharray="3 3"
-                    stroke="hsl(220 25% 15%)"
+                    stroke="hsl(228 28% 22%)"
                     vertical={false}
                   />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 10, fill: "hsl(215 20% 50%)" }}
-                    stroke="hsl(220 25% 15%)"
+                    tick={{ fontSize: 11, fill: "hsl(215 15% 55%)" }}
+                    stroke="hsl(228 28% 22%)"
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
                     domain={[0, 1]}
-                    tick={{ fontSize: 10, fill: "hsl(215 20% 50%)" }}
-                    stroke="hsl(220 25% 15%)"
+                    tick={{ fontSize: 11, fill: "hsl(215 15% 55%)" }}
+                    stroke="hsl(228 28% 22%)"
                     tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`}
                     tickLine={false}
                     axisLine={false}
@@ -231,7 +231,7 @@ export function TimelineChart({
                   <Tooltip
                     content={<CustomTooltip />}
                     cursor={{
-                      stroke: "hsl(220 25% 25%)",
+                      stroke: "hsl(228 28% 28%)",
                       strokeDasharray: "4 4",
                     }}
                   />
@@ -247,13 +247,13 @@ export function TimelineChart({
                       dot={{
                         r: 4,
                         fill: s.color,
-                        stroke: "hsl(220 33% 12%)",
+                        stroke: "hsl(230 35% 12%)",
                         strokeWidth: 2,
                       }}
                       activeDot={{
                         r: 6,
                         fill: s.color,
-                        stroke: "hsl(220 33% 12%)",
+                        stroke: "hsl(230 35% 12%)",
                         strokeWidth: 2,
                       }}
                       connectNulls
@@ -264,7 +264,7 @@ export function TimelineChart({
             </div>
 
             {/* Visit History thumbnails */}
-            <div className="mt-5 pt-4 border-t border-border/50">
+            <div className="mt-5 pt-4 border-t border-border">
               <p className="text-xs text-muted-foreground mb-3 font-medium uppercase tracking-wider">
                 Visit History
               </p>
@@ -276,7 +276,7 @@ export function TimelineChart({
                   >
                     <div
                       className={cn(
-                        "w-14 h-14 rounded-lg bg-accent/40 border flex flex-col items-center justify-center gap-0.5 transition-colors",
+                        "w-14 h-14 rounded-lg bg-[var(--surface-2)] border flex flex-col items-center justify-center gap-0.5 transition-colors",
                         trajectoryBorderColor(point.trajectory)
                       )}
                     >
@@ -285,7 +285,7 @@ export function TimelineChart({
                       </span>
                       {trajectoryIcon(point.trajectory)}
                     </div>
-                    <p className="text-[9px] text-muted-foreground/60 mt-1 font-medium">
+                    <p className="text-xs text-muted-foreground mt-1 font-medium">
                       {formatDateShort(point.visit_date)}
                     </p>
                   </div>

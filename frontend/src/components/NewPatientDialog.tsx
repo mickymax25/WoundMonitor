@@ -38,9 +38,10 @@ const COMORBIDITY_OPTIONS = [
 
 interface NewPatientDialogProps {
   onCreated: (patient: PatientResponse) => void;
+  trigger?: React.ReactNode;
 }
 
-export function NewPatientDialog({ onCreated }: NewPatientDialogProps) {
+export function NewPatientDialog({ onCreated, trigger }: NewPatientDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,10 +107,12 @@ export function NewPatientDialog({ onCreated }: NewPatientDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
       <DialogTrigger asChild>
-        <Button size="sm" className="w-full gap-2">
-          <Plus className="h-4 w-4" />
-          New Patient
-        </Button>
+        {trigger ?? (
+          <Button className="w-full gap-2 h-11 text-sm font-semibold">
+            <Plus className="h-4 w-4" />
+            New Patient
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -122,7 +125,7 @@ export function NewPatientDialog({ onCreated }: NewPatientDialogProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="patient-name">
-              Name <span className="text-red-400">*</span>
+              Name <span className="text-red-500">*</span>
             </Label>
             <Input
               id="patient-name"
@@ -192,10 +195,10 @@ export function NewPatientDialog({ onCreated }: NewPatientDialogProps) {
                     key={opt.value}
                     type="button"
                     onClick={() => toggleComorbidity(opt.value)}
-                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                    className={`px-3 py-1.5 text-xs rounded-full transition-colors ${
                       selected
-                        ? "bg-primary/20 border-primary text-primary"
-                        : "bg-transparent border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                        ? "bg-primary/15 ring-1 ring-primary/30 text-primary font-medium"
+                        : "bg-transparent ring-1 ring-border text-muted-foreground hover:ring-primary/30 hover:text-foreground"
                     }`}
                   >
                     {opt.label}
@@ -206,7 +209,7 @@ export function NewPatientDialog({ onCreated }: NewPatientDialogProps) {
           </div>
 
           {error && (
-            <p className="text-sm text-red-400" role="alert">
+            <p className="text-sm text-rose-400" role="alert">
               {error}
             </p>
           )}

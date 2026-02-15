@@ -4,8 +4,8 @@
   "description": "AI-powered chronic wound assessment",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0ea5e9",
+  "background_color": "#0b1120",
+  "theme_color": "#0f1629",
   "orientation": "any",
   "icons": [
     {

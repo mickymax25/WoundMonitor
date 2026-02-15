@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
-import random
 from typing import Any
 
 import numpy as np
@@ -55,7 +55,9 @@ class MedSigLIPWrapper:
     def get_embedding(self, image: Image.Image) -> np.ndarray:
         """Return a 1-D float32 embedding vector for the image."""
         if self.mock:
-            return np.random.default_rng().standard_normal(768).astype(np.float32)
+            seed = int.from_bytes(hashlib.md5(image.tobytes()).digest()[:4], "little")
+            rng = np.random.default_rng(seed)
+            return rng.standard_normal(768).astype(np.float32)
 
         inputs = self._image_processor(images=image, return_tensors="pt").to(self.device)
         with torch.no_grad():
@@ -79,7 +81,9 @@ class MedSigLIPWrapper:
             labels = WOUND_LABELS
 
         if self.mock:
-            raw = [random.random() for _ in labels]
+            seed = int.from_bytes(hashlib.md5(image.tobytes()).digest()[:4], "little")
+            rng = np.random.default_rng(seed + 1)  # +1 to differ from embedding
+            raw = [float(rng.random()) for _ in labels]
             total = sum(raw)
             return {label: round(val / total, 4) for label, val in zip(labels, raw)}
 

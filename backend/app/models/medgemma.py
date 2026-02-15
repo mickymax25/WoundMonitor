@@ -23,81 +23,17 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 TIME_CLASSIFICATION_PROMPT = """\
-You are a wound care specialist performing a detailed TIME framework assessment.
+Wound care specialist. Classify this wound photograph using the TIME framework.
+Score each dimension independently from 0.0 (worst) to 1.0 (best).
+Be specific: each wound has different characteristics per dimension. Describe what you see.
 
-First, think step by step about what you observe in the wound image. Consider:
-- The color and texture of the wound bed (black, yellow, red, pink)
-- Presence of slough, necrotic tissue, or granulation tissue
-- Surrounding skin condition (erythema, maceration, induration, callus)
-- Signs of exudate (amount, color, viscosity)
-- Wound edge characteristics (rolled, undermined, attached, epithelializing)
+T (Tissue): 0.0=necrotic eschar → 0.3=fibrin slough → 0.6=granulation → 0.9=epithelializing → 1.0=healed.
+I (Inflammation): 0.0=severe infection/cellulitis → 0.3=purulent exudate → 0.6=mild erythema → 0.9=minimal → 1.0=none.
+M (Moisture): 0.0=desiccated or macerated → 0.3=imbalanced → 0.6=nearly balanced → 0.9=optimal → 1.0=perfect.
+E (Edge): 0.0=undermined/tunneling → 0.3=rolled edges → 0.6=attached/contracting → 0.9=advancing → 1.0=closed.
 
-Then score each TIME dimension from 0.0 to 1.0 using the FULL decimal range. \
-Use the full range from 0.0 to 1.0 with decimal precision (e.g. 0.15, 0.33, 0.62, 0.85), \
-not just round numbers like 0.0, 0.5, or 1.0. Each wound is unique and scores should \
-reflect that specificity.
-
-TIME dimensions with scoring guidance:
-- T (Tissue): Wound bed tissue quality.
-  0.0 = necrotic/eschar (black, hard, adherent)
-  0.1 = mostly necrotic with minimal viable tissue
-  0.2 = thick slough covering most of wound bed
-  0.3 = moderate slough (yellow/grey fibrin, >50% coverage)
-  0.4 = slough mixed with early granulation
-  0.5 = patchy granulation, some slough remaining
-  0.6 = predominantly granulating with residual fibrin
-  0.7 = healthy granulation (beefy red, cobblestone texture)
-  0.8 = robust granulation with early epithelial islands
-  0.9 = mostly epithelialized with small granulating areas
-  1.0 = fully epithelialized (pink, smooth, intact skin)
-
-- I (Inflammation/Infection): Degree of inflammation or infection.
-  0.0 = systemic infection signs (purulent exudate, foul odor, cellulitis spreading)
-  0.1 = severe local infection (abscess, heavy purulence)
-  0.2 = moderate infection (green/brown exudate, increasing pain)
-  0.3 = critical colonization (delayed healing, friable granulation)
-  0.4 = significant erythema extending >2cm from wound edge
-  0.5 = moderate periwound erythema (1-2cm), warmth present
-  0.6 = mild erythema limited to wound margin
-  0.7 = minimal inflammation, slight warmth
-  0.8 = trace erythema only, no warmth
-  0.9 = periwound skin nearly normal, very slight discoloration
-  1.0 = no inflammation, healthy periwound skin
-
-- M (Moisture): Wound moisture balance.
-  0.0 = completely desiccated (dry, cracked wound bed)
-  0.1 = very dry with adherent dressing on removal
-  0.2 = dry wound bed, minimal moisture
-  0.3 = excessive moisture (macerated periwound, saturated dressings)
-  0.4 = moderately excessive (periwound showing early maceration)
-  0.5 = slightly too moist or slightly too dry
-  0.6 = nearly balanced with minor excess
-  0.7 = adequately moist, thin serous exudate
-  0.8 = well-balanced moisture, healthy wound bed glistening
-  0.9 = optimal moisture environment
-  1.0 = perfectly balanced (moist wound bed, intact periwound)
-
-- E (Edge): Wound edge and periwound skin condition.
-  0.0 = undermined/tunneling with tissue destruction
-  0.1 = significant undermining, detached edges
-  0.2 = rolled/epibole edges preventing migration
-  0.3 = thickened, non-advancing edges with callus
-  0.4 = edges attached but no visible contraction
-  0.5 = minimally advancing, early contraction signs
-  0.6 = edges attached with slow but visible contraction
-  0.7 = good edge attachment, moderate contraction
-  0.8 = actively contracting with early epithelial migration
-  0.9 = strong epithelial advancement from edges
-  1.0 = fully advancing/closed (complete epithelial coverage)
-
-Return ONLY valid JSON in this exact format, nothing else:
-{
-  "tissue": {"type": "<descriptive label>", "score": <float>},
-  "inflammation": {"type": "<descriptive label>", "score": <float>},
-  "moisture": {"type": "<descriptive label>", "score": <float>},
-  "edge": {"type": "<descriptive label>", "score": <float>}
-}
-"""
+Respond with JSON only:
+{"tissue":{"type":"what you observe","score":0.00},"inflammation":{"type":"what you observe","score":0.00},"moisture":{"type":"what you observe","score":0.00},"edge":{"type":"what you observe","score":0.00}}"""
 
 
 def _build_report_prompt(
@@ -113,9 +49,8 @@ def _build_report_prompt(
     visit_date: str | None = None,
 ) -> str:
     parts = [
-        "You are a wound care specialist. Generate a structured clinical wound assessment report.",
-        "Use the patient and wound details provided below. Do NOT use placeholders such as "
-        '"[Patient Name]", "[Date]", or "[Specify location]" — all relevant data is supplied.',
+        "You are a wound care specialist. Analyze the wound image and data below.",
+        "Respond with a JSON object ONLY. No markdown, no explanation outside the JSON.",
         "",
     ]
 
@@ -143,37 +78,172 @@ def _build_report_prompt(
     if contradiction.get("contradiction"):
         parts.append(f"\n## Contradiction detected\n{contradiction.get('detail', 'N/A')}")
     parts.append(
-        "\nProvide a concise clinical summary with: "
-        "1) Current wound status, 2) Change since last visit, "
-        "3) Recommended interventions, 4) Follow-up timeline."
+        '\nRespond with this exact JSON structure:\n'
+        '{"summary": "2-3 sentence clinical summary of wound status",'
+        ' "wound_status": "current wound status description",'
+        ' "change_analysis": "change since last visit or baseline note",'
+        ' "interventions": ["intervention 1", "intervention 2", ...],'
+        ' "follow_up": "follow-up timeline recommendation"}'
     )
     return "\n".join(parts)
+
+
+def _report_json_to_markdown(
+    report_data: dict[str, Any],
+    time_scores: dict[str, Any],
+    trajectory: str,
+    *,
+    patient_name: str | None = None,
+    wound_type: str | None = None,
+    wound_location: str | None = None,
+    visit_date: str | None = None,
+) -> str:
+    """Convert structured report JSON to standardized markdown."""
+    avg = sum(d["score"] for d in time_scores.values()) / 4
+
+    lines = [
+        "## Wound Assessment Report",
+        "",
+        f"**Patient:** {patient_name or 'Not recorded'}",
+        f"**Wound type:** {wound_type or 'Not specified'}",
+        f"**Location:** {wound_location or 'Not specified'}",
+        f"**Visit date:** {visit_date or 'Not recorded'}",
+        f"**Trajectory:** {trajectory}",
+        "",
+        "### Clinical Summary",
+        report_data.get("summary", "No summary available."),
+        "",
+        "### Current Wound Status",
+        report_data.get("wound_status", "No status available."),
+        "",
+        "### TIME Assessment",
+        f"- **Tissue:** {time_scores['tissue']['type']} ({time_scores['tissue']['score']:.2f})",
+        f"- **Inflammation:** {time_scores['inflammation']['type']} ({time_scores['inflammation']['score']:.2f})",
+        f"- **Moisture:** {time_scores['moisture']['type']} ({time_scores['moisture']['score']:.2f})",
+        f"- **Edge:** {time_scores['edge']['type']} ({time_scores['edge']['score']:.2f})",
+        f"",
+        f"**Composite score:** {avg:.2f}",
+        "",
+        "### Change Analysis",
+        report_data.get("change_analysis", "Baseline assessment — no prior data."),
+        "",
+        "### Recommended Interventions",
+    ]
+    interventions = report_data.get("interventions", [])
+    if isinstance(interventions, list) and interventions:
+        for item in interventions:
+            lines.append(f"- {item}")
+    else:
+        lines.append("- Continue current care protocol.")
+    lines.extend([
+        "",
+        "### Follow-up",
+        report_data.get("follow_up", "Schedule follow-up as clinically indicated."),
+        "",
+    ])
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
 # JSON parsing helpers
 # ---------------------------------------------------------------------------
 
+def _strip_thinking(text: str) -> str:
+    """Remove MedGemma thinking/reasoning blocks.
+
+    MedGemma-IT wraps internal reasoning in ``<unused94>thought ... <unused94>``
+    delimiters.  We strip the entire block.  If there is no closing token we
+    discard everything up to the first JSON-like ``{`` character.
+    """
+    # Pattern 1: full thinking block  <unusedN>thought ... <unusedN>
+    stripped = re.sub(
+        r"<unused\d+>\s*thought\b.*?<unused\d+>",
+        "",
+        text,
+        count=1,
+        flags=re.DOTALL,
+    )
+    if stripped != text:
+        text = stripped
+
+    # Pattern 2: thinking start with no closing token (truncated output)
+    if re.match(r"<unused\d+>\s*thought\b", text):
+        # Try to jump straight to the first '{' – the JSON payload
+        idx = text.find("{")
+        if idx != -1:
+            text = text[idx:]
+        else:
+            # No JSON at all — return empty so caller raises cleanly
+            return ""
+
+    # Remove any remaining stray special tokens
+    text = re.sub(r"<unused\d+>", "", text)
+    text = re.sub(r"<\|.*?\|>", "", text)
+    return text.strip()
+
+
+def _find_balanced_json(text: str) -> str | None:
+    """Find the first balanced ``{...}`` block in *text*.
+
+    Respects JSON string escaping so that braces inside strings are not
+    counted.  Returns ``None`` when no balanced object is found.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escape_next = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == "\\" and in_string:
+            escape_next = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
+
+
 def _extract_json_block(text: str) -> str:
-    """Extract JSON from model output that may contain markdown fences or extra text."""
+    """Extract JSON from model output that may contain thinking tokens or markdown."""
+    text = _strip_thinking(text)
+
     # Try markdown code block first
     match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, re.DOTALL)
     if match:
         return match.group(1).strip()
-    # Try to find raw JSON object
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match:
-        return match.group(0).strip()
+
+    # Try balanced-brace extraction (handles nested JSON correctly)
+    balanced = _find_balanced_json(text)
+    if balanced:
+        return balanced
+
     return text.strip()
 
 
 def parse_time_json(text: str) -> dict[str, Any]:
     """Parse TIME classification JSON from model output. Raises ValueError on failure."""
     raw = _extract_json_block(text)
+    logger.debug("Extracted JSON block (first 400 chars): %s", raw[:400])
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        logger.warning("Failed to parse TIME JSON: %s — raw text: %s", exc, text[:300])
+        logger.warning(
+            "Failed to parse TIME JSON: %s — extracted block: %.200s — raw text: %.300s",
+            exc, raw, text,
+        )
         raise ValueError(f"Could not parse TIME response: {exc}") from exc
 
     required_keys = {"tissue", "inflammation", "moisture", "edge"}
@@ -184,7 +254,12 @@ def parse_time_json(text: str) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key in required_keys:
         entry = data[key]
-        raw_score = float(entry.get("score", 0.0))
+        if "score" not in entry:
+            raise ValueError(f"Missing 'score' field for {key}: {entry}")
+        try:
+            raw_score = float(entry["score"])
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"Invalid score for {key}: {entry['score']}") from exc
         result[key] = {
             "type": str(entry.get("type", "unknown")),
             "score": max(0.0, min(1.0, raw_score)),
@@ -308,49 +383,71 @@ def _mock_report(
 ) -> str:
     avg = sum(d["score"] for d in time_scores.values()) / 4
 
-    # Determine clinical recommendation based on composite score
     if avg >= 0.7:
-        status = "The wound is healing well with favorable indicators across all TIME dimensions."
-        recommendation = (
-            "- Continue current wound care protocol.\n"
-            "- Maintain moisture balance with current dressing regimen.\n"
-            "- Schedule routine follow-up in 7-10 days."
-        )
+        report_data = {
+            "summary": "The wound is healing well with favorable indicators across all TIME dimensions.",
+            "wound_status": (
+                f"Tissue bed shows {time_scores['tissue']['type']} with minimal inflammatory signs. "
+                f"Moisture balance is adequate and wound edges are {time_scores['edge']['type']}."
+            ),
+            "change_analysis": "Positive trajectory noted." if trajectory == "improving" else "Baseline assessment.",
+            "interventions": [
+                "Continue current wound care protocol.",
+                "Maintain moisture balance with current dressing regimen.",
+                "Monitor for signs of infection at each dressing change.",
+            ],
+            "follow_up": "Schedule routine follow-up in 7-10 days.",
+        }
     elif avg >= 0.4:
-        status = "The wound shows moderate healing progress with some areas requiring attention."
-        recommendation = (
-            "- Review and consider adjusting the current dressing type.\n"
-            "- Monitor periwound skin for signs of maceration or breakdown.\n"
-            "- Consider nutritional assessment to support healing.\n"
-            "- Schedule follow-up in 5-7 days."
-        )
+        report_data = {
+            "summary": "The wound shows moderate healing progress with some areas requiring attention.",
+            "wound_status": (
+                f"Tissue presents as {time_scores['tissue']['type']}. "
+                f"Inflammation shows {time_scores['inflammation']['type']}. "
+                f"Edge status: {time_scores['edge']['type']}."
+            ),
+            "change_analysis": (
+                "Deterioration noted since last visit." if trajectory == "deteriorating"
+                else "Stable with gradual progress." if trajectory == "stable"
+                else "Baseline assessment."
+            ),
+            "interventions": [
+                "Review and consider adjusting the current dressing type.",
+                "Monitor periwound skin for signs of maceration or breakdown.",
+                "Consider nutritional assessment to support healing.",
+                "Assess need for offloading or pressure redistribution.",
+            ],
+            "follow_up": "Schedule follow-up in 5-7 days.",
+        }
     else:
-        status = "The wound presents concerning indicators that require prompt clinical intervention."
-        recommendation = (
-            "- Obtain wound culture if infection is suspected.\n"
-            "- Consider debridement of non-viable tissue.\n"
-            "- Reassess offloading and pressure redistribution.\n"
-            "- Escalate to wound care specialist if not already involved.\n"
-            "- Schedule follow-up within 2-3 days."
-        )
+        report_data = {
+            "summary": "The wound presents concerning indicators that require prompt clinical intervention.",
+            "wound_status": (
+                f"Tissue shows {time_scores['tissue']['type']} with "
+                f"{time_scores['inflammation']['type']}. "
+                f"Moisture: {time_scores['moisture']['type']}. Edge: {time_scores['edge']['type']}."
+            ),
+            "change_analysis": (
+                "Significant deterioration since last visit — urgent review needed."
+                if trajectory == "deteriorating"
+                else "Initial assessment reveals poor wound status."
+            ),
+            "interventions": [
+                "Obtain wound culture if infection is suspected.",
+                "Consider debridement of non-viable tissue.",
+                "Reassess offloading and pressure redistribution.",
+                "Escalate to wound care specialist if not already involved.",
+                "Review systemic factors affecting healing.",
+            ],
+            "follow_up": "Schedule follow-up within 2-3 days.",
+        }
 
-    return (
-        f"## Wound Assessment Report (MOCK)\n\n"
-        f"**Patient:** {patient_name or 'Not recorded'}\n"
-        f"**Wound type:** {wound_type or 'Not specified'}\n"
-        f"**Location:** {wound_location or 'Not specified'}\n"
-        f"**Visit date:** {visit_date or 'Not recorded'}\n"
-        f"**Trajectory:** {trajectory}\n\n"
-        f"### Clinical Summary\n"
-        f"{status}\n\n"
-        f"### TIME Assessment\n"
-        f"- Tissue: {time_scores['tissue']['type']} ({time_scores['tissue']['score']:.2f})\n"
-        f"- Inflammation: {time_scores['inflammation']['type']} ({time_scores['inflammation']['score']:.2f})\n"
-        f"- Moisture: {time_scores['moisture']['type']} ({time_scores['moisture']['score']:.2f})\n"
-        f"- Edge: {time_scores['edge']['type']} ({time_scores['edge']['score']:.2f})\n\n"
-        f"**Composite score:** {avg:.2f}\n\n"
-        f"### Recommendations\n"
-        f"{recommendation}\n"
+    return _report_json_to_markdown(
+        report_data, time_scores, trajectory,
+        patient_name=patient_name,
+        wound_type=wound_type,
+        wound_location=wound_location,
+        visit_date=visit_date,
     )
 
 
@@ -406,8 +503,9 @@ class MedGemmaWrapper:
                     ],
                 }
             ]
-            output = self._pipe(text=messages, max_new_tokens=500)
+            output = self._pipe(text=messages, max_new_tokens=1024)
             text: str = output[0]["generated_text"][-1]["content"]
+            logger.debug("MedGemma raw output (first 500 chars): %s", text[:500])
             try:
                 return parse_time_json(text)
             except ValueError as exc:
@@ -461,7 +559,21 @@ class MedGemmaWrapper:
             }
         ]
         output = self._pipe(text=messages, max_new_tokens=1500)
-        return output[0]["generated_text"][-1]["content"]
+        raw_text: str = output[0]["generated_text"][-1]["content"]
+
+        # Try to parse as JSON and convert to standardized markdown
+        report_data = parse_json_safe(raw_text)
+        if report_data and "summary" in report_data:
+            return _report_json_to_markdown(
+                report_data, time_scores, trajectory,
+                patient_name=patient_name,
+                wound_type=wound_type,
+                wound_location=wound_location,
+                visit_date=visit_date,
+            )
+        # Fallback: return raw text if JSON parsing fails
+        logger.warning("Report JSON parse failed, returning raw text.")
+        return raw_text
 
     # ---- Contradiction detection --------------------------------------------
 

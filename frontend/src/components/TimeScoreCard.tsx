@@ -15,145 +15,125 @@ interface TimeScoreCardProps {
   data: TimeScore;
 }
 
-function scoreStrokeColor(score: number): string {
-  if (score >= 0.7) return "#10b981";
-  if (score >= 0.4) return "#f59e0b";
-  return "#f43f5e";
+function qualitativeLabel(score: number): string {
+  if (score >= 0.8) return "Good";
+  if (score >= 0.6) return "Fair";
+  if (score >= 0.4) return "Moderate";
+  if (score >= 0.2) return "Poor";
+  return "Critical";
 }
 
-function scoreBgGlow(score: number): string {
-  if (score >= 0.7) return "shadow-emerald-500/10";
-  if (score >= 0.4) return "shadow-amber-500/10";
-  return "shadow-rose-500/10";
+function severityBadge(score: number): string {
+  if (score >= 0.7) return "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/15";
+  if (score >= 0.4) return "bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/15";
+  return "bg-rose-500/10 text-rose-400 ring-1 ring-rose-500/15";
 }
 
-function scoreTextColor(score: number): string {
+function severityText(score: number): string {
   if (score >= 0.7) return "text-emerald-400";
-  if (score >= 0.4) return "text-amber-400";
+  if (score >= 0.4) return "text-orange-400";
   return "text-rose-400";
 }
 
-function scoreBorderColor(score: number): string {
-  if (score >= 0.7) return "border-emerald-500/20";
-  if (score >= 0.4) return "border-amber-500/20";
-  return "border-rose-500/20";
+function barColor(score: number): string {
+  if (score >= 0.7) return "bg-emerald-400";
+  if (score >= 0.4) return "bg-orange-400";
+  return "bg-rose-400";
 }
 
 const DIMENSION_CONFIG: Record<
   string,
-  { label: string; icon: React.ReactNode }
+  {
+    label: string;
+    icon: React.ElementType;
+    accent: string;
+    iconColor: string;
+  }
 > = {
   tissue: {
     label: "Tissue",
-    icon: <Activity className="h-3.5 w-3.5" />,
+    icon: Activity,
+    accent: "bg-teal-400",
+    iconColor: "text-teal-500",
   },
   inflammation: {
     label: "Inflammation",
-    icon: <Flame className="h-3.5 w-3.5" />,
+    icon: Flame,
+    accent: "bg-orange-400",
+    iconColor: "text-orange-500",
   },
   moisture: {
     label: "Moisture",
-    icon: <Droplets className="h-3.5 w-3.5" />,
+    icon: Droplets,
+    accent: "bg-sky-400",
+    iconColor: "text-sky-500",
   },
   edge: {
     label: "Edge",
-    icon: <GitBranch className="h-3.5 w-3.5" />,
+    icon: GitBranch,
+    accent: "bg-violet-400",
+    iconColor: "text-violet-500",
   },
 };
-
-// SVG circular gauge
-const RADIUS = 36;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-
-function CircularGauge({ score }: { score: number }) {
-  const percent = scoreToPercent(score);
-  const offset = CIRCUMFERENCE - (percent / 100) * CIRCUMFERENCE;
-  const strokeColor = scoreStrokeColor(score);
-
-  return (
-    <div className="relative w-[88px] h-[88px] mx-auto">
-      <svg
-        viewBox="0 0 88 88"
-        className="w-full h-full -rotate-90"
-      >
-        {/* Background track */}
-        <circle
-          cx="44"
-          cy="44"
-          r={RADIUS}
-          fill="none"
-          stroke="hsl(220 25% 18%)"
-          strokeWidth="6"
-        />
-        {/* Progress arc */}
-        <circle
-          cx="44"
-          cy="44"
-          r={RADIUS}
-          fill="none"
-          stroke={strokeColor}
-          strokeWidth="6"
-          strokeLinecap="round"
-          strokeDasharray={CIRCUMFERENCE}
-          strokeDashoffset={offset}
-          className="transition-all duration-700 ease-out"
-          style={
-            {
-              "--gauge-circumference": CIRCUMFERENCE,
-              "--gauge-offset": offset,
-            } as React.CSSProperties
-          }
-        />
-      </svg>
-      {/* Center text */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span
-          className={cn(
-            "text-lg font-bold font-mono leading-none",
-            scoreTextColor(score)
-          )}
-        >
-          {percent}
-        </span>
-        <span className="text-[9px] text-muted-foreground/60 mt-0.5">
-          / 100
-        </span>
-      </div>
-    </div>
-  );
-}
 
 export function TimeScoreCard({ dimension, data }: TimeScoreCardProps) {
   const config = DIMENSION_CONFIG[dimension] || {
     label: dimension,
-    icon: <Activity className="h-3.5 w-3.5" />,
+    icon: Activity,
+    accent: "bg-slate-400",
+    iconColor: "text-muted-foreground",
   };
 
+  const Icon = config.icon;
+  const percent = scoreToPercent(data.score);
+  const label = qualitativeLabel(data.score);
+
   return (
-    <div
-      className={cn(
-        "rounded-xl border bg-card/80 p-4 transition-all duration-200 shadow-lg",
-        scoreBorderColor(data.score),
-        scoreBgGlow(data.score)
-      )}
-    >
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-3">
-        <span className={cn("opacity-70", scoreTextColor(data.score))}>
-          {config.icon}
-        </span>
-        <span className="text-xs font-semibold text-foreground">
-          {config.label}
-        </span>
+    <div className="apple-card overflow-hidden flex">
+      {/* Left accent bar */}
+      <div className={cn("w-1 shrink-0 rounded-l-xl", config.accent)} />
+
+      <div className="flex-1 p-3 min-w-0">
+        {/* Header: icon + label */}
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Icon className={cn("h-3.5 w-3.5 shrink-0", config.iconColor)} />
+          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider truncate">
+            {config.label}
+          </span>
+        </div>
+
+        {/* Score + badge */}
+        <div className="flex items-end justify-between mb-2">
+          <span className={cn("text-[22px] font-bold tabular-nums leading-none", severityText(data.score))}>
+            {percent}
+            <span className="text-[10px] font-normal text-muted-foreground/50 ml-0.5">%</span>
+          </span>
+          <span
+            className={cn(
+              "text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap",
+              severityBadge(data.score),
+            )}
+          >
+            {label}
+          </span>
+        </div>
+
+        {/* Progress bar */}
+        <div className="rounded-full h-1 w-full bg-muted mb-2">
+          <div
+            className={cn(
+              "rounded-full h-1 transition-all duration-700 ease-out",
+              barColor(data.score),
+            )}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+
+        {/* Description */}
+        <p className="text-[11px] text-muted-foreground leading-relaxed first-letter:uppercase line-clamp-2">
+          {data.type.toLowerCase()}
+        </p>
       </div>
-
-      {/* Circular Gauge */}
-      <CircularGauge score={data.score} />
-
-      {/* Label */}
-      <p className="text-[10px] text-muted-foreground text-center mt-2 capitalize truncate">
-        {data.type}
-      </p>
     </div>
   );
 }

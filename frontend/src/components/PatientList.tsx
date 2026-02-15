@@ -28,9 +28,9 @@ function TrajectoryIcon({ trajectory }: { trajectory: string | null }) {
     case "deteriorating":
       return <TrendingDown className="h-3.5 w-3.5 text-rose-400" />;
     case "stable":
-      return <Minus className="h-3.5 w-3.5 text-amber-400" />;
+      return <Minus className="h-3.5 w-3.5 text-sky-400" />;
     default:
-      return <Activity className="h-3.5 w-3.5 text-slate-500" />;
+      return <Activity className="h-3.5 w-3.5 text-muted-foreground" />;
   }
 }
 
@@ -62,15 +62,15 @@ function getInitials(name: string): string {
 function avatarBgColor(alertLevel: string | null): string {
   switch (alertLevel) {
     case "red":
-      return "bg-rose-500/20 text-rose-400 border-rose-500/30";
+      return "bg-rose-500/15 text-rose-400 border-rose-500/20";
     case "orange":
-      return "bg-orange-500/20 text-orange-400 border-orange-500/30";
+      return "bg-orange-500/15 text-orange-400 border-orange-500/20";
     case "yellow":
-      return "bg-amber-500/20 text-amber-400 border-amber-500/30";
+      return "bg-sky-500/15 text-sky-400 border-sky-500/20";
     case "green":
-      return "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
+      return "bg-emerald-500/15 text-emerald-400 border-emerald-500/20";
     default:
-      return "bg-slate-500/20 text-slate-400 border-slate-500/30";
+      return "bg-muted text-muted-foreground border-border";
   }
 }
 
@@ -94,11 +94,11 @@ function trajectoryTextColor(trajectory: string | null): string {
     case "improving":
       return "text-emerald-400";
     case "stable":
-      return "text-amber-400";
+      return "text-sky-400";
     case "deteriorating":
       return "text-rose-400";
     default:
-      return "text-slate-500";
+      return "text-muted-foreground";
   }
 }
 
@@ -109,7 +109,6 @@ export function PatientList({
   onSelect,
   onPatientCreated,
 }: PatientListProps) {
-  // Sort patients by most recent activity (created_at descending)
   const sortedPatients = useMemo(() => {
     return [...patients].sort((a, b) => {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -123,7 +122,7 @@ export function PatientList({
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
             Patients
           </h2>
-          <span className="text-[10px] text-muted-foreground/60 bg-accent/50 px-2 py-0.5 rounded-full">
+          <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border">
             {patients.length}
           </span>
         </div>
@@ -146,7 +145,7 @@ export function PatientList({
           </div>
         ) : patients.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
-            <div className="w-12 h-12 rounded-xl bg-accent/50 flex items-center justify-center mx-auto mb-3 border border-border">
+            <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3 border border-border">
               <FileText className="h-6 w-6 opacity-40" />
             </div>
             <p className="text-sm font-medium mb-1">No patients yet</p>
@@ -165,14 +164,13 @@ export function PatientList({
                   onClick={() => onSelect(patient)}
                   className={cn(
                     "w-full text-left p-3 rounded-lg transition-all duration-150",
-                    "hover:bg-accent/60",
+                    "hover:bg-muted/50",
                     isSelected
-                      ? "bg-accent/80 border-l-2 border-l-primary border border-primary/20 card-glow"
+                      ? "bg-primary/10 border-l-2 border-l-primary border border-primary/20"
                       : "border border-transparent"
                   )}
                 >
                   <div className="flex items-start gap-3">
-                    {/* Avatar with initials */}
                     <div
                       className={cn(
                         "w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shrink-0 border",
@@ -183,7 +181,6 @@ export function PatientList({
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      {/* Name and alert dot */}
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-semibold text-foreground truncate">
                           {patient.name}
@@ -196,7 +193,6 @@ export function PatientList({
                         />
                       </div>
 
-                      {/* Wound type and location */}
                       <div className="flex items-center gap-2 mt-0.5">
                         {patient.wound_type && (
                           <span className="text-xs text-muted-foreground">
@@ -204,22 +200,21 @@ export function PatientList({
                           </span>
                         )}
                         {patient.wound_type && patient.wound_location && (
-                          <span className="text-muted-foreground/30 text-xs">|</span>
+                          <span className="text-muted-foreground/40 text-xs">|</span>
                         )}
                         {patient.wound_location && (
-                          <span className="text-xs text-muted-foreground/70 flex items-center gap-0.5">
+                          <span className="text-xs text-muted-foreground flex items-center gap-0.5">
                             <MapPin className="h-2.5 w-2.5" />
                             {woundLocationLabel(patient.wound_location)}
                           </span>
                         )}
                       </div>
 
-                      {/* Bottom row: trajectory, visits */}
                       <div className="flex items-center gap-3 mt-2">
                         {patient.latest_trajectory && (
                           <span
                             className={cn(
-                              "flex items-center gap-1 text-[10px] font-medium",
+                              "flex items-center gap-1 text-xs font-medium",
                               trajectoryTextColor(patient.latest_trajectory)
                             )}
                           >
@@ -227,12 +222,12 @@ export function PatientList({
                             {trajectoryLabel(patient.latest_trajectory)}
                           </span>
                         )}
-                        <span className="text-[10px] text-muted-foreground/50">
+                        <span className="text-xs text-muted-foreground">
                           {patient.assessment_count} visit
                           {patient.assessment_count !== 1 ? "s" : ""}
                         </span>
                         {isSelected && patient.created_at && (
-                          <span className="text-[10px] text-muted-foreground/40 ml-auto">
+                          <span className="text-xs text-muted-foreground ml-auto">
                             {formatDate(patient.created_at)}
                           </span>
                         )}

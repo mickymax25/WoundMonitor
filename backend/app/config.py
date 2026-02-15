@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     DEVICE: str = _detect_device()
     MOCK_MODELS: bool = False
 
-    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://34.6.16.126:3000", "*"]
 
     model_config = {"env_prefix": "WOUNDCHRONO_", "env_file": ".env", "extra": "ignore"}
 
