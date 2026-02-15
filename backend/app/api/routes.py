@@ -6,7 +6,9 @@ import json
 import logging
 import os
 import shutil
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -49,8 +51,10 @@ def get_agent() -> Any:
 def _save_upload(file: UploadFile, subdir: str) -> str:
     """Save an uploaded file to UPLOAD_DIR/<subdir> and return the relative path."""
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    safe_name = file.filename.replace(" ", "_") if file.filename else "upload"
-    filename = f"{ts}_{safe_name}"
+    # Strip directory components to prevent path traversal, then add UUID for uniqueness
+    raw_name = Path(file.filename).name if file.filename else "upload"
+    safe_name = raw_name.replace(" ", "_")
+    filename = f"{ts}_{uuid.uuid4().hex[:8]}_{safe_name}"
     dest_dir = os.path.join(settings.UPLOAD_DIR, subdir)
     os.makedirs(dest_dir, exist_ok=True)
     dest = os.path.join(dest_dir, filename)
@@ -189,9 +193,18 @@ def analyze_assessment(assessment_id: str) -> AnalysisResult:
     image_path = assessment["image_path"]
     if not os.path.isfile(image_path):
         raise HTTPException(status_code=404, detail=f"Image file not found: {image_path}")
-    image = Image.open(image_path).convert("RGB")
+    try:
+        image = Image.open(image_path).convert("RGB")
+    except Exception as exc:
+        logger.warning("Failed to open image %s: %s", image_path, exc)
+        raise HTTPException(
+            status_code=422, detail=f"Cannot open image file: {exc}"
+        ) from exc
 
     audio_path = assessment.get("audio_path")
+    if audio_path and not os.path.isfile(audio_path):
+        logger.warning("Audio file not found, skipping: %s", audio_path)
+        audio_path = None
 
     try:
         result = agent.analyze(assessment_id, image, audio_path=audio_path)

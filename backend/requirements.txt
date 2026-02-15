@@ -11,3 +11,5 @@ transformers>=5.0.0
 huggingface-hub>=0.26.0
 python-jose[cryptography]==3.3.0
 scipy==1.14.0
+sentencepiece
+protobuf

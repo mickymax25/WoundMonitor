@@ -25,6 +25,17 @@ import { createPatient } from "@/lib/api";
 import { WOUND_TYPES, WOUND_LOCATIONS } from "@/lib/types";
 import type { PatientResponse } from "@/lib/types";
 
+const COMORBIDITY_OPTIONS = [
+  { value: "diabetes", label: "Diabetes" },
+  { value: "hypertension", label: "Hypertension" },
+  { value: "peripheral_neuropathy", label: "Peripheral Neuropathy" },
+  { value: "venous_insufficiency", label: "Venous Insufficiency" },
+  { value: "anemia", label: "Anemia" },
+  { value: "leprosy", label: "Leprosy" },
+  { value: "immunosuppression", label: "Immunosuppression" },
+  { value: "obesity", label: "Obesity" },
+] as const;
+
 interface NewPatientDialogProps {
   onCreated: (patient: PatientResponse) => void;
 }
@@ -38,12 +49,22 @@ export function NewPatientDialog({ onCreated }: NewPatientDialogProps) {
   const [age, setAge] = useState("");
   const [woundType, setWoundType] = useState("");
   const [woundLocation, setWoundLocation] = useState("");
+  const [comorbidities, setComorbidities] = useState<string[]>([]);
+
+  const toggleComorbidity = useCallback((value: string) => {
+    setComorbidities((prev) =>
+      prev.includes(value)
+        ? prev.filter((c) => c !== value)
+        : [...prev, value]
+    );
+  }, []);
 
   const resetForm = useCallback(() => {
     setName("");
     setAge("");
     setWoundType("");
     setWoundLocation("");
+    setComorbidities([]);
     setError(null);
   }, []);
 
@@ -64,7 +85,7 @@ export function NewPatientDialog({ onCreated }: NewPatientDialogProps) {
           age: age ? parseInt(age, 10) : null,
           wound_type: woundType || null,
           wound_location: woundLocation || null,
-          comorbidities: [],
+          comorbidities,
         });
         onCreated(patient);
         setOpen(false);
@@ -79,7 +100,7 @@ export function NewPatientDialog({ onCreated }: NewPatientDialogProps) {
         setLoading(false);
       }
     },
-    [name, age, woundType, woundLocation, onCreated, resetForm]
+    [name, age, woundType, woundLocation, comorbidities, onCreated, resetForm]
   );
 
   return (
@@ -159,6 +180,29 @@ export function NewPatientDialog({ onCreated }: NewPatientDialogProps) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Comorbidities</Label>
+            <div className="flex flex-wrap gap-2">
+              {COMORBIDITY_OPTIONS.map((opt) => {
+                const selected = comorbidities.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => toggleComorbidity(opt.value)}
+                    className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                      selected
+                        ? "bg-primary/20 border-primary text-primary"
+                        : "bg-transparent border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {error && (

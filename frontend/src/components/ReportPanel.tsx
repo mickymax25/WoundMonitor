@@ -75,7 +75,7 @@ function renderMarkdown(text: string): React.ReactNode[] {
   const elements: React.ReactNode[] = [];
 
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
+    const line = lines[i];
 
     // Headers
     if (line.startsWith("### ")) {
@@ -103,11 +103,30 @@ function renderMarkdown(text: string): React.ReactNode[] {
       continue;
     }
 
+    // Horizontal rule
+    if (/^-{3,}$/.test(line.trim()) || /^\*{3,}$/.test(line.trim())) {
+      elements.push(
+        <hr key={i} className="border-border my-3" />
+      );
+      continue;
+    }
+
     // Bullet points
     if (line.startsWith("- ") || line.startsWith("* ")) {
       elements.push(
         <li key={i} className="text-sm text-foreground/90 ml-4 list-disc">
           {renderInline(line.slice(2))}
+        </li>
+      );
+      continue;
+    }
+
+    // Numbered lists (e.g. "1. ", "12. ")
+    const numberedMatch = line.match(/^(\d+)\.\s+(.*)/);
+    if (numberedMatch) {
+      elements.push(
+        <li key={i} className="text-sm text-foreground/90 ml-4 list-decimal">
+          {renderInline(numberedMatch[2])}
         </li>
       );
       continue;
@@ -131,20 +150,38 @@ function renderMarkdown(text: string): React.ReactNode[] {
 }
 
 function renderInline(text: string): React.ReactNode {
-  // Bold
-  const parts = text.split(/\*\*(.*?)\*\*/g);
-  if (parts.length > 1) {
-    return parts.map((part, i) =>
+  // Split on bold (**) and inline code (`) patterns
+  // Process bold first, then inline code within each segment
+  const boldParts = text.split(/\*\*(.*?)\*\*/g);
+  if (boldParts.length > 1) {
+    return boldParts.map((part, i) =>
       i % 2 === 1 ? (
         <strong key={i} className="font-semibold text-foreground">
-          {part}
+          {renderCode(part)}
         </strong>
       ) : (
-        part
+        <React.Fragment key={i}>{renderCode(part)}</React.Fragment>
       )
     );
   }
-  return text;
+  return renderCode(text);
+}
+
+function renderCode(text: string): React.ReactNode {
+  const parts = text.split(/`([^`]+)`/g);
+  if (parts.length <= 1) return text;
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <code
+        key={i}
+        className="px-1.5 py-0.5 rounded bg-accent text-xs font-mono text-primary"
+      >
+        {part}
+      </code>
+    ) : (
+      part
+    )
+  );
 }
 
 export function ReportPanel({ result }: ReportPanelProps) {

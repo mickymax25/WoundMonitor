@@ -42,11 +42,12 @@ class MedSigLIPWrapper:
         if self.mock:
             logger.info("MedSigLIP running in MOCK mode.")
             return
-        from transformers import AutoModel, AutoProcessor  # type: ignore[import-untyped]
+        from transformers import SiglipModel, SiglipImageProcessor, SiglipTokenizer  # type: ignore[import-untyped]
 
         logger.info("Loading MedSigLIP model %s on %s ...", self.model_name, self.device)
-        self._model = AutoModel.from_pretrained(self.model_name).to(self.device)
-        self._processor = AutoProcessor.from_pretrained(self.model_name)
+        self._model = SiglipModel.from_pretrained(self.model_name).to(self.device)
+        self._image_processor = SiglipImageProcessor.from_pretrained(self.model_name)
+        self._tokenizer = SiglipTokenizer.from_pretrained(self.model_name)
         logger.info("MedSigLIP loaded.")
 
     # ---- Embedding ----------------------------------------------------------
@@ -56,9 +57,16 @@ class MedSigLIPWrapper:
         if self.mock:
             return np.random.default_rng().standard_normal(768).astype(np.float32)
 
-        inputs = self._processor(images=image, return_tensors="pt").to(self.device)
+        inputs = self._image_processor(images=image, return_tensors="pt").to(self.device)
         with torch.no_grad():
-            features = self._model.get_image_features(**inputs)
+            output = self._model.get_image_features(**inputs)
+        # Handle both tensor and BaseModelOutputWithPooling returns
+        if hasattr(output, "pooler_output"):
+            features = output.pooler_output
+        elif hasattr(output, "last_hidden_state"):
+            features = output.last_hidden_state[:, 0]
+        else:
+            features = output
         return features.cpu().numpy().flatten().astype(np.float32)
 
     # ---- Zero-shot classification -------------------------------------------
@@ -75,9 +83,9 @@ class MedSigLIPWrapper:
             total = sum(raw)
             return {label: round(val / total, 4) for label, val in zip(labels, raw)}
 
-        inputs = self._processor(
-            text=labels, images=image, return_tensors="pt", padding=True
-        ).to(self.device)
+        text_inputs = self._tokenizer(labels, return_tensors="pt", padding=True).to(self.device)
+        image_inputs = self._image_processor(images=image, return_tensors="pt").to(self.device)
+        inputs = {**text_inputs, **image_inputs}
         with torch.no_grad():
             outputs = self._model(**inputs)
         probs = outputs.logits_per_image.softmax(dim=1)[0]

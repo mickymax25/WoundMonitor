@@ -7,7 +7,10 @@ import {
   Activity,
   FileText,
   Zap,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { PatientList } from "@/components/PatientList";
 import { AssessmentPanel } from "@/components/AssessmentPanel";
 import { TimelineChart } from "@/components/TimelineChart";
@@ -20,6 +23,7 @@ import type { PatientResponse, AnalysisResult, MobileTab } from "@/lib/types";
 export default function DashboardPage() {
   const [patients, setPatients] = useState<PatientResponse[]>([]);
   const [loadingPatients, setLoadingPatients] = useState(true);
+  const [patientFetchError, setPatientFetchError] = useState<string | null>(null);
   const [selectedPatient, setSelectedPatient] =
     useState<PatientResponse | null>(null);
   const [analysisResult, setAnalysisResult] =
@@ -29,11 +33,14 @@ export default function DashboardPage() {
 
   const fetchPatients = useCallback(async () => {
     setLoadingPatients(true);
+    setPatientFetchError(null);
     try {
       const data = await listPatients();
       setPatients(data);
-    } catch {
-      // Fail silently for now; patients list will be empty.
+    } catch (err) {
+      setPatientFetchError(
+        err instanceof Error ? err.message : "Failed to load patients."
+      );
     } finally {
       setLoadingPatients(false);
     }
@@ -114,6 +121,27 @@ export default function DashboardPage() {
           )}
         </div>
       </header>
+
+      {/* Patient fetch error banner */}
+      {patientFetchError && !loadingPatients && (
+        <div className="shrink-0 px-4 py-2 bg-destructive/10 border-b border-destructive/30">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{patientFetchError}</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchPatients}
+              className="shrink-0 gap-1.5 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Retry
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Desktop Layout (md+) */}
       <div className="hidden md:flex flex-1 min-h-0">

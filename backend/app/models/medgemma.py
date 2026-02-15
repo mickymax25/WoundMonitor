@@ -111,9 +111,10 @@ def parse_time_json(text: str) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key in required_keys:
         entry = data[key]
+        raw_score = float(entry.get("score", 0.0))
         result[key] = {
             "type": str(entry.get("type", "unknown")),
-            "score": float(entry.get("score", 0.0)),
+            "score": max(0.0, min(1.0, raw_score)),
         }
     return result
 
@@ -190,22 +191,36 @@ class MedGemmaWrapper:
     # ---- TIME classification ------------------------------------------------
 
     def classify_time(self, image: Image.Image) -> dict[str, Any]:
-        """Classify wound using the TIME framework."""
+        """Classify wound using the TIME framework. Retries once on JSON parse failure."""
         if self.mock:
             return _mock_time_classification()
 
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": image},
-                    {"type": "text", "text": TIME_CLASSIFICATION_PROMPT},
-                ],
-            }
-        ]
-        output = self._pipe(text=messages, max_new_tokens=500)
-        text: str = output[0]["generated_text"][-1]["content"]
-        return parse_time_json(text)
+        max_retries = 2
+        last_error: Exception | None = None
+        for attempt in range(max_retries):
+            prompt = TIME_CLASSIFICATION_PROMPT
+            if attempt > 0:
+                prompt += "\nRemember: respond with valid JSON only."
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image},
+                        {"type": "text", "text": prompt},
+                    ],
+                }
+            ]
+            output = self._pipe(text=messages, max_new_tokens=500)
+            text: str = output[0]["generated_text"][-1]["content"]
+            try:
+                return parse_time_json(text)
+            except ValueError as exc:
+                last_error = exc
+                logger.warning(
+                    "classify_time JSON parse failed (attempt %d/%d): %s",
+                    attempt + 1, max_retries, exc,
+                )
+        raise last_error  # type: ignore[misc]
 
     # ---- Report generation --------------------------------------------------
 

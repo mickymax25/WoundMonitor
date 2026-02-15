@@ -16,6 +16,7 @@ env/
 **/data/uploads/
 **/woundchrono.db
 *.db
+data/CO2Wounds-V2*/
 
 # Environment
 .env
