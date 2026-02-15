@@ -419,27 +419,28 @@ export function ReportPanel({
   const trajectoryConfig =
     TRAJECTORY_CONFIG[result.trajectory] || TRAJECTORY_CONFIG.baseline;
 
-  // Global wound health score (0-100) — normalized composite of TIME dimensions
+  // Healing score: average of 4 TIME dimensions, shown as 1-10
   const timeScores = Object.values(result.time_classification);
   const compositeRaw = timeScores.reduce((sum, d) => sum + d.score, 0) / timeScores.length;
-  const globalScore = Math.round(compositeRaw * 100);
+  const healingScore = Math.max(1, Math.min(10, Math.round(compositeRaw * 10)));
+  const healingPercent = Math.round(compositeRaw * 100);
 
-  function globalScoreColor(score: number): string {
-    if (score >= 70) return "text-emerald-500";
-    if (score >= 40) return "text-orange-400";
+  function healingColor(score: number): string {
+    if (score >= 7) return "text-emerald-500";
+    if (score >= 4) return "text-orange-400";
     return "text-rose-400";
   }
-  function globalScoreRingColor(score: number): string {
-    if (score >= 70) return "stroke-emerald-400";
-    if (score >= 40) return "stroke-orange-400";
+  function healingRingColor(score: number): string {
+    if (score >= 7) return "stroke-emerald-400";
+    if (score >= 4) return "stroke-orange-400";
     return "stroke-rose-400";
   }
-  function globalScoreLabel(score: number): string {
-    if (score >= 80) return "Good condition";
-    if (score >= 60) return "Fair condition";
-    if (score >= 40) return "Needs attention";
-    if (score >= 20) return "Poor condition";
-    return "Critical";
+  function healingLabel(score: number): string {
+    if (score >= 8) return "Healing well — wound is progressing";
+    if (score >= 6) return "Progressing — continue current care";
+    if (score >= 4) return "Needs attention — consider care plan review";
+    if (score >= 2) return "Poor healing — intervention recommended";
+    return "Critical — urgent attention required";
   }
 
   return (
@@ -461,10 +462,10 @@ export function ReportPanel({
       {/* Alert Banner */}
       <AlertBanner level={result.alert_level} detail={result.alert_detail} />
 
-      {/* Global Score + Trajectory */}
+      {/* Healing Score + Trajectory */}
       <div className="apple-card p-4">
         <div className="flex items-center gap-4">
-          {/* Circular score gauge */}
+          {/* Circular healing gauge */}
           <div className="relative shrink-0 w-20 h-20">
             <svg viewBox="0 0 80 80" className="w-20 h-20 -rotate-90">
               <circle
@@ -476,24 +477,25 @@ export function ReportPanel({
               <circle
                 cx="40" cy="40" r="34"
                 fill="none"
-                className={globalScoreRingColor(globalScore)}
+                className={healingRingColor(healingScore)}
                 strokeWidth="5"
                 strokeLinecap="round"
                 strokeDasharray={`${2 * Math.PI * 34}`}
-                strokeDashoffset={`${2 * Math.PI * 34 * (1 - globalScore / 100)}`}
+                strokeDashoffset={`${2 * Math.PI * 34 * (1 - healingPercent / 100)}`}
                 style={{ transition: "stroke-dashoffset 1s ease-out" }}
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className={cn("text-xl font-bold tabular-nums leading-none", globalScoreColor(globalScore))}>
-                {globalScore}
+              <span className={cn("text-xl font-bold tabular-nums leading-none", healingColor(healingScore))}>
+                {healingScore}
               </span>
-              <span className="text-[9px] text-muted-foreground/60 font-medium mt-0.5">/100</span>
+              <span className="text-[9px] text-muted-foreground/60 font-medium mt-0.5">/10</span>
             </div>
           </div>
 
           {/* Trajectory + description */}
           <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-medium mb-1">Healing Score</p>
             <div
               className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold mb-1.5",
@@ -505,7 +507,7 @@ export function ReportPanel({
               {trajectoryConfig.label}
             </div>
             <p className="text-[13px] text-muted-foreground leading-snug">
-              {globalScoreLabel(globalScore)}
+              {healingLabel(healingScore)}
               {result.trajectory !== "baseline" && result.change_score !== null && (
                 <>
                   {" — "}
