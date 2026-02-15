@@ -6,11 +6,12 @@ import {
   Stethoscope,
   Activity,
   FileText,
-  Zap,
+  Heart,
   RefreshCw,
   AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { PatientList } from "@/components/PatientList";
 import { AssessmentPanel } from "@/components/AssessmentPanel";
 import { TimelineChart } from "@/components/TimelineChart";
@@ -71,22 +72,20 @@ export default function DashboardPage() {
     (result: AnalysisResult) => {
       setAnalysisResult(result);
       setTrajectoryRefresh((r) => r + 1);
-      // Refresh patient list to update trajectory/alert indicators
       fetchPatients();
     },
     [fetchPatients]
   );
 
-  // Placeholder for when no patient is selected (center panel)
   const EmptyCenter = () => (
     <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-20">
-      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-        <Stethoscope className="h-8 w-8 text-primary/60" />
+      <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 border border-primary/20">
+        <Stethoscope className="h-10 w-10 text-primary/60" />
       </div>
-      <h3 className="text-lg font-semibold text-foreground mb-1">
+      <h3 className="text-xl font-semibold text-foreground mb-2">
         WoundChrono
       </h3>
-      <p className="text-sm text-center max-w-xs">
+      <p className="text-sm text-center max-w-xs leading-relaxed">
         Select a patient from the sidebar or register a new one to begin
         wound assessment.
       </p>
@@ -96,29 +95,36 @@ export default function DashboardPage() {
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="shrink-0 border-b border-border bg-card/50 backdrop-blur-sm">
-        <div className="flex items-center justify-between px-4 h-14">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
-              <Zap className="h-4.5 w-4.5 text-primary" />
+      <header className="shrink-0 border-b border-border bg-card/80 backdrop-blur-md">
+        <div className="flex items-center justify-between px-5 h-16">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center border border-primary/20">
+              <Heart className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-sm font-semibold text-foreground leading-tight">
+              <h1 className="text-base font-bold text-foreground leading-tight tracking-tight">
                 WoundChrono
               </h1>
               <p className="text-[10px] text-muted-foreground leading-tight">
-                AI Wound Assessment
+                AI-Powered Wound Assessment
               </p>
             </div>
           </div>
-          {selectedPatient && (
-            <div className="hidden md:flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Patient:</span>
-              <span className="font-medium text-foreground">
-                {selectedPatient.name}
-              </span>
-            </div>
-          )}
+
+          <div className="hidden md:flex items-center gap-4">
+            {selectedPatient && (
+              <div className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md bg-accent/50 border border-border">
+                <span className="text-muted-foreground text-xs">Patient:</span>
+                <span className="font-medium text-foreground text-xs">
+                  {selectedPatient.name}
+                </span>
+              </div>
+            )}
+            <Badge variant="secondary" className="text-[10px] px-2.5 py-1 gap-1.5 font-normal border border-border bg-accent/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              MedGemma + MedSigLIP + MedASR
+            </Badge>
+          </div>
         </div>
       </header>
 
@@ -146,7 +152,7 @@ export default function DashboardPage() {
       {/* Desktop Layout (md+) */}
       <div className="hidden md:flex flex-1 min-h-0">
         {/* Left Sidebar - Patient List */}
-        <aside className="w-[280px] border-r border-border bg-card/30 shrink-0 overflow-hidden">
+        <aside className="w-[300px] border-r border-border bg-card/40 shrink-0 overflow-hidden">
           <PatientList
             patients={patients}
             selectedId={selectedPatient?.id ?? null}
@@ -157,14 +163,18 @@ export default function DashboardPage() {
         </aside>
 
         {/* Center Panel */}
-        <main className="flex-1 min-w-0 overflow-y-auto p-4 space-y-4">
+        <main className="flex-1 min-w-0 overflow-y-auto p-6 space-y-5">
           {selectedPatient ? (
             <>
               <AssessmentPanel
                 patient={selectedPatient}
                 onAnalysisComplete={handleAnalysisComplete}
               />
-              <ReportPanel result={analysisResult} />
+              <ReportPanel
+                result={analysisResult}
+                patientName={selectedPatient.name}
+                woundType={selectedPatient.wound_type}
+              />
             </>
           ) : (
             <EmptyCenter />
@@ -172,7 +182,7 @@ export default function DashboardPage() {
         </main>
 
         {/* Right Sidebar - Timeline */}
-        <aside className="w-[360px] border-l border-border bg-card/30 shrink-0 overflow-y-auto p-4">
+        <aside className="w-[380px] border-l border-border bg-card/40 shrink-0 overflow-y-auto p-5">
           {selectedPatient ? (
             <TimelineChart
               patientId={selectedPatient.id}
@@ -180,9 +190,11 @@ export default function DashboardPage() {
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-              <Activity className="h-8 w-8 mb-2 opacity-40" />
-              <p className="text-sm">Trajectory chart</p>
-              <p className="text-xs mt-1">
+              <div className="w-14 h-14 rounded-xl bg-accent/50 flex items-center justify-center mb-3 border border-border">
+                <Activity className="h-7 w-7 opacity-40" />
+              </div>
+              <p className="text-sm font-medium">Trajectory Chart</p>
+              <p className="text-xs mt-1 text-muted-foreground/60">
                 Select a patient to view history.
               </p>
             </div>
@@ -197,7 +209,7 @@ export default function DashboardPage() {
           onValueChange={(v) => setMobileTab(v as MobileTab)}
           className="flex flex-col flex-1 min-h-0"
         >
-          <TabsList className="w-full rounded-none border-b border-border h-12 bg-card/50 shrink-0">
+          <TabsList className="w-full rounded-none border-b border-border h-12 bg-card/60 shrink-0">
             <TabsTrigger value="patients" className="flex-1 gap-1.5 text-xs">
               <Users className="h-3.5 w-3.5" />
               Patients
@@ -284,7 +296,11 @@ export default function DashboardPage() {
             value="report"
             className="flex-1 min-h-0 overflow-y-auto p-4 mt-0"
           >
-            <ReportPanel result={analysisResult} />
+            <ReportPanel
+              result={analysisResult}
+              patientName={selectedPatient?.name ?? null}
+              woundType={selectedPatient?.wound_type ?? null}
+            />
           </TabsContent>
         </Tabs>
       </div>

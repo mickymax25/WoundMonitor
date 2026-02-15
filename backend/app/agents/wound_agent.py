@@ -139,14 +139,16 @@ class WoundAgent:
         embedding = self.medsiglip.get_embedding(image)
         zeroshot = self.medsiglip.zero_shot_classify(image, WOUND_LABELS)
 
-        # Step 2: MedGemma — TIME classification
-        logger.info("Step 2: Running TIME classification via MedGemma.")
-        time_scores = self.medgemma.classify_time(image)
-
-        # Step 3: Retrieve previous assessment for this patient
+        # Step 2: MedGemma — TIME classification (fetch assessment first for image_path)
         assessment = self.db.get_assessment(assessment_id)
         if assessment is None:
             raise ValueError(f"Assessment {assessment_id} not found.")
+        logger.info("Step 2: Running TIME classification via MedGemma.")
+        time_scores = self.medgemma.classify_time(
+            image, image_path=assessment.get("image_path"),
+        )
+
+        # Step 3: Retrieve previous assessment for this patient
         patient_id = assessment["patient_id"]
         current_date = assessment["visit_date"]
         previous = self.db.get_latest_assessment(
@@ -182,8 +184,13 @@ class WoundAgent:
 
         # Step 7: Report generation
         logger.info("Step 7: Generating clinical report.")
+        patient = self.db.get_patient(patient_id)
         report = self.medgemma.generate_report(
-            image, time_scores, trajectory, change_score, nurse_notes, contradiction
+            image, time_scores, trajectory, change_score, nurse_notes, contradiction,
+            patient_name=patient.get("name") if patient else None,
+            wound_type=patient.get("wound_type") if patient else None,
+            wound_location=patient.get("wound_location") if patient else None,
+            visit_date=current_date,
         )
 
         # Step 8: Alert determination
