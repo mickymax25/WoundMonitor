@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   Upload,
   Camera,
@@ -9,12 +9,16 @@ import {
   AlertTriangle,
   ImageIcon,
   Trash2,
+  Activity,
+  Eye,
+  TrendingUp,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AudioRecorder } from "@/components/AudioRecorder";
 import { CameraCapture } from "@/components/CameraCapture";
 import { createAssessment, analyzeAssessment } from "@/lib/api";
-import { compressImage } from "@/lib/utils";
+import { cn, compressImage } from "@/lib/utils";
 import type { PatientResponse, AnalysisResult } from "@/lib/types";
 
 interface AssessmentPanelProps {
@@ -24,6 +28,84 @@ interface AssessmentPanelProps {
 
 type AnalysisStep = "idle" | "uploading" | "analyzing" | "done" | "error";
 
+const ANALYSIS_STEPS = [
+  { label: "Wound classification", icon: Activity },
+  { label: "Visual analysis", icon: Eye },
+  { label: "Trajectory comparison", icon: TrendingUp },
+  { label: "Generating report", icon: FileText },
+] as const;
+
+function AnalysisSteps() {
+  const [currentStep, setCurrentStep] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentStep((prev) => Math.min(prev + 1, ANALYSIS_STEPS.length - 1));
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="space-y-2">
+      {ANALYSIS_STEPS.map((s, i) => {
+        const Icon = s.icon;
+        const isDone = i < currentStep;
+        const isActive = i === currentStep;
+
+        return (
+          <div
+            key={i}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2 rounded-lg transition-all",
+              isDone && "opacity-60",
+              isActive && "bg-primary/10 ring-1 ring-primary/20"
+            )}
+          >
+            <div
+              className={cn(
+                "w-5 h-5 rounded-full flex items-center justify-center shrink-0",
+                isDone
+                  ? "bg-emerald-500/20"
+                  : isActive
+                    ? "bg-primary/20"
+                    : "bg-muted"
+              )}
+            >
+              {isDone ? (
+                <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
+              ) : isActive ? (
+                <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+              ) : (
+                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
+              )}
+            </div>
+            <Icon className={cn(
+              "h-3.5 w-3.5 shrink-0",
+              isDone
+                ? "text-emerald-400/60"
+                : isActive
+                  ? "text-primary"
+                  : "text-muted-foreground/30"
+            )} />
+            <span
+              className={cn(
+                "text-xs font-medium",
+                isDone
+                  ? "text-emerald-400/60"
+                  : isActive
+                    ? "text-foreground"
+                    : "text-muted-foreground/40"
+              )}
+            >
+              {s.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function AssessmentPanel({
   patient,
   onAnalysisComplete,
@@ -31,6 +113,7 @@ export function AssessmentPanel({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [textNotes, setTextNotes] = useState<string>("");
   const [step, setStep] = useState<AnalysisStep>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showCamera, setShowCamera] = useState(false);
@@ -100,7 +183,9 @@ export function AssessmentPanel({
       const assessment = await createAssessment(
         patient.id,
         imageFile,
-        audioFile
+        audioFile,
+        undefined, // visitDate
+        textNotes.trim() || undefined
       );
 
       setStep("analyzing");
@@ -114,7 +199,7 @@ export function AssessmentPanel({
         err instanceof Error ? err.message : "Analysis failed."
       );
     }
-  }, [imageFile, audioBlob, patient.id, onAnalysisComplete]);
+  }, [imageFile, audioBlob, textNotes, patient.id, onAnalysisComplete]);
 
   const isProcessing = step === "uploading" || step === "analyzing";
 
@@ -147,16 +232,14 @@ export function AssessmentPanel({
               />
               {isProcessing && (
                 <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
-                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  <div className="w-[280px]">
+                    <div className="text-center mb-5">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
+                      <p className="text-sm text-foreground font-semibold">
+                        {step === "uploading" ? "Uploading..." : "Analyzing wound..."}
+                      </p>
                     </div>
-                    <p className="text-sm text-foreground font-semibold">
-                      {step === "uploading"
-                        ? "Uploading assessment..."
-                        : "AI analysis in progress..."}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">This may take a moment</p>
+                    {step === "analyzing" && <AnalysisSteps />}
                   </div>
                 </div>
               )}
@@ -253,6 +336,25 @@ export function AssessmentPanel({
           )}
         </div>
 
+        {/* Clinical notes */}
+        <div>
+          <label htmlFor="clinical-notes" className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
+            Clinical Notes <span className="normal-case tracking-normal font-normal">(optional)</span>
+          </label>
+          <textarea
+            id="clinical-notes"
+            value={textNotes}
+            onChange={(e) => setTextNotes(e.target.value)}
+            disabled={isProcessing}
+            placeholder="Dressing changed, no signs of infection, patient reports mild discomfort..."
+            rows={3}
+            className="w-full rounded-xl bg-[var(--surface-2)] ring-1 ring-border px-3 py-2.5
+                       text-sm text-foreground placeholder:text-muted-foreground/40
+                       focus:outline-none focus:ring-2 focus:ring-primary/50
+                       disabled:opacity-40 resize-none"
+          />
+        </div>
+
         {/* Analyze button */}
         <button
           type="button"
@@ -274,7 +376,7 @@ export function AssessmentPanel({
           {step === "analyzing" && (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              AI analysis in progress...
+              Analyzing wound...
             </>
           )}
           {step === "done" && (

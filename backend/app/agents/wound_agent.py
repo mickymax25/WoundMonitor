@@ -166,13 +166,21 @@ class WoundAgent:
         else:
             logger.info("Step 4: No previous analyzed assessment — marking as baseline.")
 
-        # Step 5: Audio transcription (optional)
+        # Step 5: Audio transcription (optional) + text notes
         nurse_notes: str | None = None
         if audio_path:
             logger.info("Step 5: Transcribing nurse audio notes.")
             nurse_notes = self.medasr.transcribe(audio_path)
         else:
             logger.info("Step 5: No audio provided, skipping transcription.")
+
+        # Combine typed text notes with audio transcription
+        text_notes = assessment.get("text_notes")
+        if text_notes:
+            if nurse_notes:
+                nurse_notes = f"{nurse_notes}\n\nAdditional typed notes: {text_notes}"
+            else:
+                nurse_notes = text_notes
 
         # Step 6: Contradiction detection
         contradiction: dict[str, Any] = {"contradiction": False, "detail": None}

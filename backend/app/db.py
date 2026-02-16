@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS assessments (
     zeroshot_scores TEXT,
     audio_path TEXT,
     nurse_notes TEXT,
+    text_notes TEXT,
     change_score REAL,
     trajectory TEXT,
     contradiction_flag BOOLEAN DEFAULT FALSE,
@@ -149,14 +150,15 @@ def create_assessment(data: dict[str, Any]) -> dict[str, Any]:
     conn = get_db()
     try:
         conn.execute(
-            "INSERT INTO assessments (id, patient_id, visit_date, image_path, audio_path, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO assessments (id, patient_id, visit_date, image_path, audio_path, text_notes, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 assessment_id,
                 data["patient_id"],
                 visit_date,
                 data["image_path"],
                 data.get("audio_path"),
+                data.get("text_notes"),
                 now,
             ),
         )
@@ -194,9 +196,9 @@ def update_assessment(assessment_id: str, data: dict[str, Any]) -> dict[str, Any
         allowed = {
             "tissue_type", "tissue_score", "inflammation", "inflammation_score",
             "moisture", "moisture_score", "edge", "edge_score", "embedding",
-            "zeroshot_scores", "audio_path", "nurse_notes", "change_score",
-            "trajectory", "contradiction_flag", "contradiction_detail",
-            "report_text", "alert_level", "alert_detail",
+            "zeroshot_scores", "audio_path", "nurse_notes", "text_notes",
+            "change_score", "trajectory", "contradiction_flag",
+            "contradiction_detail", "report_text", "alert_level", "alert_detail",
         }
         cols = []
         vals: list[Any] = []

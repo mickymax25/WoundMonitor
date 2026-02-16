@@ -27,10 +27,11 @@ import { NewPatientDialog } from "@/components/NewPatientDialog";
 import { AssessmentPanel } from "@/components/AssessmentPanel";
 import { TimelineChart } from "@/components/TimelineChart";
 import { ReportPanel } from "@/components/ReportPanel";
+import { AssessmentHistory } from "@/components/AssessmentHistory";
 import { PatientList } from "@/components/PatientList";
 import { listPatients, listPatientAssessments } from "@/lib/api";
 import { cn, alertDotColor } from "@/lib/utils";
-import type { PatientResponse, AnalysisResult, MobileTab } from "@/lib/types";
+import type { PatientResponse, AssessmentResponse, AnalysisResult, MobileTab } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -192,6 +193,27 @@ export default function Dashboard() {
       setActiveTab("reports");
     },
     [fetchPatients]
+  );
+
+  // Map an AssessmentResponse (from history list) into the AnalysisResult shape
+  // consumed by ReportPanel. Mirrors the mapping in handleSelectPatient.
+  const handleSelectHistoryAssessment = useCallback(
+    (a: AssessmentResponse) => {
+      if (!a.time_classification) return;
+      setAnalysisResult({
+        assessment_id: a.id,
+        time_classification: a.time_classification,
+        zeroshot_scores: a.zeroshot_scores ?? {},
+        trajectory: a.trajectory ?? "baseline",
+        change_score: a.change_score ?? null,
+        contradiction_flag: a.contradiction_flag ?? false,
+        contradiction_detail: a.contradiction_detail ?? null,
+        report_text: a.report_text ?? "",
+        alert_level: a.alert_level ?? "green",
+        alert_detail: a.alert_detail ?? null,
+      });
+    },
+    []
   );
 
   // ---------------------------------------------------------------------------
@@ -733,6 +755,12 @@ export default function Dashboard() {
                   patientId={selectedPatient.id}
                   refreshKey={trajectoryRefresh}
                 />
+                <AssessmentHistory
+                  patientId={selectedPatient.id}
+                  currentAssessmentId={analysisResult.assessment_id}
+                  onSelectAssessment={handleSelectHistoryAssessment}
+                  refreshKey={trajectoryRefresh}
+                />
               </>
             ) : (
               <div className="flex flex-col items-center justify-center py-16">
@@ -913,12 +941,22 @@ export default function Dashboard() {
           )}
         </main>
 
-        <aside className="w-[360px] bg-[var(--surface-1)] shrink-0 overflow-y-auto p-4 border-l border-border/50">
+        <aside className="w-[360px] bg-[var(--surface-1)] shrink-0 overflow-y-auto p-4 space-y-4 border-l border-border/50">
           {selectedPatient ? (
-            <TimelineChart
-              patientId={selectedPatient.id}
-              refreshKey={trajectoryRefresh}
-            />
+            <>
+              <TimelineChart
+                patientId={selectedPatient.id}
+                refreshKey={trajectoryRefresh}
+              />
+              {analysisResult && (
+                <AssessmentHistory
+                  patientId={selectedPatient.id}
+                  currentAssessmentId={analysisResult.assessment_id}
+                  onSelectAssessment={handleSelectHistoryAssessment}
+                  refreshKey={trajectoryRefresh}
+                />
+              )}
+            </>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
               <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center mb-3 ring-1 ring-border">

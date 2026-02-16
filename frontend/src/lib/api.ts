@@ -68,7 +68,8 @@ export async function createAssessment(
   patientId: string,
   image: File,
   audio?: File,
-  visitDate?: string
+  visitDate?: string,
+  textNotes?: string
 ): Promise<AssessmentResponse> {
   const formData = new FormData();
   formData.append("patient_id", patientId);
@@ -78,6 +79,9 @@ export async function createAssessment(
   }
   if (visitDate) {
     formData.append("visit_date", visitDate);
+  }
+  if (textNotes) {
+    formData.append("text_notes", textNotes);
   }
 
   return request<AssessmentResponse>("/api/v1/assessments", {

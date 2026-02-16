@@ -152,6 +152,7 @@ def create_assessment(
     image: UploadFile = File(...),
     audio: UploadFile | None = File(None),
     visit_date: str | None = Form(None),
+    text_notes: str | None = Form(None),
 ) -> AssessmentResponse:
     # Validate patient exists
     patient = db.get_patient(patient_id)
@@ -171,6 +172,7 @@ def create_assessment(
         "image_path": image_path,
         "audio_path": audio_path,
         "visit_date": visit_date,
+        "text_notes": text_notes,
     }
     assessment = db.create_assessment(data)
     return _assessment_to_response(assessment)
