@@ -8,14 +8,14 @@ import {
   CheckCircle,
   AlertTriangle,
   ImageIcon,
-  Trash2,
+  X,
   Activity,
   Eye,
   TrendingUp,
   FileText,
+  Mic,
+  Square,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { AudioRecorder } from "@/components/AudioRecorder";
 import { CameraCapture } from "@/components/CameraCapture";
 import { createAssessment, analyzeAssessment } from "@/lib/api";
 import { cn, compressImage } from "@/lib/utils";
@@ -46,7 +46,7 @@ function AnalysisSteps() {
   }, []);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {ANALYSIS_STEPS.map((s, i) => {
         const Icon = s.icon;
         const isDone = i < currentStep;
@@ -56,45 +56,35 @@ function AnalysisSteps() {
           <div
             key={i}
             className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-lg transition-all",
-              isDone && "opacity-60",
-              isActive && "bg-primary/10 ring-1 ring-primary/20"
+              "flex items-center gap-2.5 px-3 py-1.5 rounded-lg transition-all",
+              isDone && "opacity-50",
+              isActive && "bg-primary/10"
             )}
           >
             <div
               className={cn(
-                "w-5 h-5 rounded-full flex items-center justify-center shrink-0",
-                isDone
-                  ? "bg-emerald-500/20"
-                  : isActive
-                    ? "bg-primary/20"
-                    : "bg-muted"
+                "w-4.5 h-4.5 rounded-full flex items-center justify-center shrink-0",
+                isDone ? "bg-emerald-500/20" : isActive ? "bg-primary/20" : "bg-muted"
               )}
             >
               {isDone ? (
-                <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
+                <CheckCircle className="h-3 w-3 text-emerald-400" />
               ) : isActive ? (
-                <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+                <Loader2 className="h-3 w-3 text-primary animate-spin" />
               ) : (
-                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
+                <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
               )}
             </div>
-            <Icon className={cn(
-              "h-3.5 w-3.5 shrink-0",
-              isDone
-                ? "text-emerald-400/60"
-                : isActive
-                  ? "text-primary"
-                  : "text-muted-foreground/30"
-            )} />
+            <Icon
+              className={cn(
+                "h-3 w-3 shrink-0",
+                isDone ? "text-emerald-400/60" : isActive ? "text-primary" : "text-muted-foreground/30"
+              )}
+            />
             <span
               className={cn(
-                "text-xs font-medium",
-                isDone
-                  ? "text-emerald-400/60"
-                  : isActive
-                    ? "text-foreground"
-                    : "text-muted-foreground/40"
+                "text-[11px] font-medium",
+                isDone ? "text-emerald-400/60" : isActive ? "text-foreground" : "text-muted-foreground/40"
               )}
             >
               {s.label}
@@ -105,6 +95,98 @@ function AnalysisSteps() {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Inline Audio Recorder (compact, matches the panel style)
+// ---------------------------------------------------------------------------
+
+function InlineAudioRecorder({
+  onRecordingComplete,
+  hasRecording,
+  disabled,
+}: {
+  onRecordingComplete: (blob: Blob) => void;
+  hasRecording: boolean;
+  disabled: boolean;
+}) {
+  const [isRecording, setIsRecording] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        onRecordingComplete(blob);
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      mediaRecorder.start(100);
+      setIsRecording(true);
+      setDuration(0);
+      timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
+    } catch {
+      // Microphone access denied
+    }
+  }, [onRecordingComplete]);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    setIsRecording(false);
+  }, []);
+
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+
+  if (isRecording) {
+    return (
+      <button
+        type="button"
+        onClick={stopRecording}
+        className="flex items-center gap-2 h-10 px-3.5 rounded-xl
+                   bg-rose-500/15 text-rose-400 text-[12px] font-semibold
+                   ring-1 ring-rose-500/20 active:bg-rose-500/25 transition-colors"
+      >
+        <span className="h-2 w-2 rounded-full bg-rose-500 animate-recording" />
+        <span className="font-mono tabular-nums">{fmt(duration)}</span>
+        <Square className="h-3 w-3 ml-0.5" />
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={startRecording}
+      disabled={disabled}
+      className={cn(
+        "flex items-center gap-2 h-10 px-3.5 rounded-xl text-[12px] font-semibold transition-colors",
+        hasRecording
+          ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20"
+          : "bg-[var(--surface-3)] text-muted-foreground ring-1 ring-border/50 active:bg-[var(--surface-2)]",
+        "disabled:opacity-30"
+      )}
+    >
+      <Mic className="h-3.5 w-3.5" />
+      {hasRecording ? "Re-record" : "Voice Notes"}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Assessment Panel
+// ---------------------------------------------------------------------------
 
 export function AssessmentPanel({
   patient,
@@ -140,9 +222,7 @@ export function AssessmentPanel({
     (e: React.DragEvent) => {
       e.preventDefault();
       const file = e.dataTransfer.files[0];
-      if (file && file.type.startsWith("image/")) {
-        handleImageSelect(file);
-      }
+      if (file && file.type.startsWith("image/")) handleImageSelect(file);
     },
     [handleImageSelect]
   );
@@ -175,16 +255,14 @@ export function AssessmentPanel({
 
     try {
       const audioFile = audioBlob
-        ? new File([audioBlob], "nurse_notes.webm", {
-            type: audioBlob.type || "audio/webm",
-          })
+        ? new File([audioBlob], "nurse_notes.webm", { type: audioBlob.type || "audio/webm" })
         : undefined;
 
       const assessment = await createAssessment(
         patient.id,
         imageFile,
         audioFile,
-        undefined, // visitDate
+        undefined,
         textNotes.trim() || undefined
       );
 
@@ -195,9 +273,7 @@ export function AssessmentPanel({
       onAnalysisComplete(analysisResult);
     } catch (err) {
       setStep("error");
-      setErrorMsg(
-        err instanceof Error ? err.message : "Analysis failed."
-      );
+      setErrorMsg(err instanceof Error ? err.message : "Analysis failed.");
     }
   }, [imageFile, audioBlob, textNotes, patient.id, onAnalysisComplete]);
 
@@ -212,190 +288,162 @@ export function AssessmentPanel({
         />
       )}
 
-      <div className="space-y-5">
-        {/* Section title */}
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Camera className="h-3.5 w-3.5 text-primary" />
-          </div>
-          <h3 className="text-[15px] font-bold text-foreground">New Assessment</h3>
-        </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleFileInput}
+        className="hidden"
+        aria-label="Upload wound photograph"
+      />
 
-        {/* Image upload / preview */}
-        <div className="apple-card overflow-hidden">
-          {imagePreview ? (
-            <div className="relative group">
-              <img
-                src={imagePreview}
-                alt="Wound photograph"
-                className="w-full max-h-80 object-contain bg-black/30"
-              />
-              {isProcessing && (
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-                  <div className="w-[280px]">
-                    <div className="text-center mb-5">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
-                      <p className="text-sm text-foreground font-semibold">
-                        {step === "uploading" ? "Uploading..." : "Analyzing wound..."}
-                      </p>
-                    </div>
-                    {step === "analyzing" && <AnalysisSteps />}
+      <div className="space-y-3 p-4">
+        {/* ── Photo area ── */}
+        {imagePreview ? (
+          <div className="relative rounded-2xl overflow-hidden ring-1 ring-border/30">
+            <img
+              src={imagePreview}
+              alt="Wound photograph"
+              className="w-full max-h-64 object-contain bg-black/20"
+            />
+            {/* Processing overlay */}
+            {isProcessing && (
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+                <div className="w-[260px]">
+                  <div className="text-center mb-4">
+                    <Loader2 className="h-7 w-7 animate-spin text-primary mx-auto mb-2" />
+                    <p className="text-[13px] text-foreground font-semibold">
+                      {step === "uploading" ? "Uploading..." : "Analyzing wound..."}
+                    </p>
                   </div>
+                  {step === "analyzing" && <AnalysisSteps />}
                 </div>
-              )}
-              {!isProcessing && (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="icon"
-                  className="absolute top-3 right-3 h-10 w-10 md:opacity-0 md:group-hover:opacity-100 transition-opacity shadow-lg rounded-xl"
-                  onClick={clearImage}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              className="p-8 text-center cursor-pointer
-                         bg-[var(--surface-2)]
-                         hover:bg-[var(--surface-3)]
-                         transition-all duration-300"
-              onClick={() => fileInputRef.current?.click()}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ")
-                  fileInputRef.current?.click();
-              }}
-            >
-              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                <ImageIcon className="h-8 w-8 text-primary/50" />
               </div>
-              <p className="text-[14px] text-foreground font-semibold mb-1">
-                <span className="hidden md:inline">Drop wound photograph here</span>
-                <span className="md:hidden">Tap to capture wound photo</span>
+            )}
+            {/* Remove button */}
+            {!isProcessing && (
+              <button
+                type="button"
+                onClick={clearImage}
+                className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full
+                           bg-black/50 backdrop-blur-sm text-white/80
+                           flex items-center justify-center
+                           active:bg-black/70 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        ) : (
+          <div
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            className="rounded-2xl border-2 border-dashed border-border/40
+                       bg-[var(--surface-2)]/50
+                       transition-colors duration-200
+                       hover:border-primary/30 hover:bg-primary/5"
+          >
+            {/* Tap zone */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-8 flex flex-col items-center gap-2"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center ring-1 ring-primary/15">
+                <ImageIcon className="h-5 w-5 text-primary/60" />
+              </div>
+              <p className="text-[13px] text-foreground/80 font-medium">
+                <span className="hidden md:inline">Drop wound photo or click to browse</span>
+                <span className="md:hidden">Tap to select wound photo</span>
               </p>
-              <p className="text-xs text-muted-foreground/60">
-                <span className="hidden md:inline">or click to browse files</span>
-                <span className="md:hidden">or browse your photo library</span>
-              </p>
+            </button>
+            {/* Camera / Upload split buttons */}
+            <div className="flex border-t border-border/30">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessing}
+                className="flex-1 flex items-center justify-center gap-2 py-3
+                           text-[12px] font-semibold text-primary/70
+                           active:bg-primary/5 transition-colors
+                           border-r border-border/30
+                           disabled:opacity-30"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Gallery
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCamera(true)}
+                disabled={isProcessing}
+                className="flex-1 flex items-center justify-center gap-2 py-3
+                           text-[12px] font-semibold text-primary/70
+                           active:bg-primary/5 transition-colors
+                           disabled:opacity-30"
+              >
+                <Camera className="h-3.5 w-3.5" />
+                Camera
+              </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleFileInput}
-          className="hidden"
-          aria-label="Upload wound photograph"
-        />
-
-        {/* Action buttons row */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="flex items-center gap-2 h-11 px-4 rounded-xl
-                       bg-[var(--surface-2)] ring-1 ring-border text-[13px] font-medium text-foreground
-                       active:scale-[0.97] transition-all
-                       disabled:opacity-40"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isProcessing}
-          >
-            <Upload className="h-4 w-4 text-primary" />
-            Upload
-          </button>
-
-          <button
-            type="button"
-            className="flex items-center gap-2 h-11 px-4 rounded-xl
-                       bg-[var(--surface-2)] ring-1 ring-border text-[13px] font-medium text-foreground
-                       active:scale-[0.97] transition-all
-                       disabled:opacity-40"
-            onClick={() => setShowCamera(true)}
-            disabled={isProcessing}
-          >
-            <Camera className="h-4 w-4 text-primary" />
-            Camera
-          </button>
-
-          <AudioRecorder
-            onRecordingComplete={(blob) => setAudioBlob(blob)}
-            disabled={isProcessing}
-          />
-
-          {audioBlob && (
-            <span className="text-[11px] text-emerald-400 font-semibold px-2.5 py-1.5 bg-emerald-500/10 rounded-lg ring-1 ring-emerald-500/20">
-              Audio recorded
-            </span>
-          )}
-        </div>
-
-        {/* Clinical notes */}
-        <div>
-          <label htmlFor="clinical-notes" className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
-            Clinical Notes <span className="normal-case tracking-normal font-normal">(optional)</span>
-          </label>
+        {/* ── Notes row: voice + text ── */}
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2">
+            <InlineAudioRecorder
+              onRecordingComplete={(blob) => setAudioBlob(blob)}
+              hasRecording={audioBlob !== null}
+              disabled={isProcessing}
+            />
+            {audioBlob && (
+              <span className="text-[10px] text-emerald-400/70 font-medium">Recorded</span>
+            )}
+          </div>
           <textarea
-            id="clinical-notes"
             value={textNotes}
             onChange={(e) => setTextNotes(e.target.value)}
             disabled={isProcessing}
-            placeholder="Dressing changed, no signs of infection, patient reports mild discomfort..."
-            rows={3}
-            className="w-full rounded-xl bg-[var(--surface-2)] ring-1 ring-border px-3 py-2.5
-                       text-sm text-foreground placeholder:text-muted-foreground/40
-                       focus:outline-none focus:ring-2 focus:ring-primary/50
-                       disabled:opacity-40 resize-none"
+            placeholder="Clinical notes (optional)..."
+            rows={2}
+            className="w-full rounded-xl bg-[var(--surface-2)] ring-1 ring-border/40 px-3.5 py-2.5
+                       text-[13px] text-foreground placeholder:text-muted-foreground/35
+                       focus:outline-none focus:ring-2 focus:ring-primary/40
+                       disabled:opacity-30 resize-none leading-relaxed"
           />
         </div>
 
-        {/* Analyze button */}
+        {/* ── Analyze CTA ── */}
         <button
           type="button"
           onClick={handleAnalyze}
           disabled={!imageFile || isProcessing}
-          className="w-full flex items-center justify-center gap-2 h-14 rounded-2xl
-                     text-[14px] font-bold text-white
-                     bg-primary
-                     shadow-lg shadow-primary/20
-                     active:scale-[0.97] transition-all
-                     disabled:opacity-30 disabled:shadow-none disabled:bg-muted disabled:text-muted-foreground"
+          className={cn(
+            "w-full flex items-center justify-center gap-2 h-12 rounded-2xl",
+            "text-[14px] font-bold transition-all active:scale-[0.97]",
+            imageFile && !isProcessing
+              ? "bg-primary text-white shadow-lg shadow-primary/25"
+              : "bg-muted text-muted-foreground/40"
+          )}
         >
           {step === "uploading" && (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Uploading assessment...
-            </>
+            <><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</>
           )}
           {step === "analyzing" && (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Analyzing wound...
-            </>
+            <><Loader2 className="h-4 w-4 animate-spin" /> Analyzing...</>
           )}
           {step === "done" && (
-            <>
-              <CheckCircle className="h-4 w-4" />
-              Analysis Complete
-            </>
+            <><CheckCircle className="h-4 w-4" /> Complete</>
           )}
           {step === "error" && (
-            <>
-              <AlertTriangle className="h-4 w-4" />
-              Retry Analysis
-            </>
+            <><AlertTriangle className="h-4 w-4" /> Retry Analysis</>
           )}
           {step === "idle" && "Analyze Wound"}
         </button>
 
         {errorMsg && (
-          <p className="text-sm text-rose-400" role="alert">
+          <p className="text-[12px] text-rose-400 text-center" role="alert">
             {errorMsg}
           </p>
         )}

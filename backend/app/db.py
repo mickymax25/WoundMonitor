@@ -16,9 +16,17 @@ CREATE TABLE IF NOT EXISTS patients (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     age INTEGER,
+    sex TEXT,
+    phone TEXT,
     wound_type TEXT,
     wound_location TEXT,
     comorbidities TEXT,
+    referring_physician TEXT,
+    referring_physician_specialty TEXT,
+    referring_physician_facility TEXT,
+    referring_physician_phone TEXT,
+    referring_physician_email TEXT,
+    referring_physician_preferred_contact TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -47,6 +55,18 @@ CREATE TABLE IF NOT EXISTS assessments (
     report_text TEXT,
     alert_level TEXT,
     alert_detail TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS referrals (
+    id TEXT PRIMARY KEY,
+    assessment_id TEXT NOT NULL REFERENCES assessments(id),
+    patient_id TEXT NOT NULL REFERENCES patients(id),
+    urgency TEXT NOT NULL DEFAULT 'routine',
+    physician_name TEXT,
+    physician_contact TEXT,
+    referral_notes TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """
@@ -95,15 +115,23 @@ def create_patient(data: dict[str, Any]) -> dict[str, Any]:
     conn = get_db()
     try:
         conn.execute(
-            "INSERT INTO patients (id, name, age, wound_type, wound_location, comorbidities, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO patients (id, name, age, sex, phone, wound_type, wound_location, comorbidities, referring_physician, referring_physician_specialty, referring_physician_facility, referring_physician_phone, referring_physician_email, referring_physician_preferred_contact, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 patient_id,
                 data["name"],
                 data.get("age"),
+                data.get("sex"),
+                data.get("phone"),
                 data.get("wound_type"),
                 data.get("wound_location"),
                 comorbidities,
+                data.get("referring_physician"),
+                data.get("referring_physician_specialty"),
+                data.get("referring_physician_facility"),
+                data.get("referring_physician_phone"),
+                data.get("referring_physician_email"),
+                data.get("referring_physician_preferred_contact"),
                 now,
             ),
         )
@@ -255,3 +283,78 @@ def get_latest_assessment(
         return _row_to_dict(row)
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Referrals
+# ---------------------------------------------------------------------------
+
+def create_referral(data: dict[str, Any]) -> dict[str, Any]:
+    referral_id = str(uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO referrals "
+            "(id, assessment_id, patient_id, urgency, physician_name, physician_contact, referral_notes, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                referral_id,
+                data["assessment_id"],
+                data["patient_id"],
+                data.get("urgency", "routine"),
+                data.get("physician_name"),
+                data.get("physician_contact"),
+                data.get("referral_notes"),
+                data.get("status", "pending"),
+                now,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return get_referral(referral_id)  # type: ignore[return-value]
+
+
+def get_referral(referral_id: str) -> dict[str, Any] | None:
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM referrals WHERE id = ?", (referral_id,)).fetchone()
+        return _row_to_dict(row)
+    finally:
+        conn.close()
+
+
+def get_referrals_for_patient(patient_id: str) -> list[dict[str, Any]]:
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM referrals WHERE patient_id = ? ORDER BY created_at DESC",
+            (patient_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def update_referral(referral_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    conn = get_db()
+    try:
+        allowed = {"urgency", "physician_name", "physician_contact", "referral_notes", "status"}
+        cols = []
+        vals: list[Any] = []
+        for k, v in data.items():
+            if k in allowed:
+                cols.append(f"{k} = ?")
+                vals.append(v)
+        if not cols:
+            return get_referral(referral_id)
+        vals.append(referral_id)
+        conn.execute(
+            f"UPDATE referrals SET {', '.join(cols)} WHERE id = ?",
+            vals,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return get_referral(referral_id)

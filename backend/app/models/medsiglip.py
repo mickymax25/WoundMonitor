@@ -27,6 +27,17 @@ WOUND_LABELS: list[str] = [
     "wound with undermined edges",
 ]
 
+BURN_LABELS: list[str] = [
+    "superficial partial-thickness burn",
+    "deep partial-thickness burn",
+    "full-thickness burn with eschar",
+    "burn wound with active infection",
+    "clean granulating burn wound",
+    "re-epithelializing burn wound",
+    "healed burn with hypertrophic scarring",
+    "burn wound with graft integration",
+]
+
 
 class MedSigLIPWrapper:
     """Thin wrapper around the MedSigLIP vision-language model."""

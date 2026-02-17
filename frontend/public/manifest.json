@@ -1,11 +1,11 @@
 {
-  "name": "WoundChrono",
-  "short_name": "WoundChrono",
+  "name": "Wound Monitor",
+  "short_name": "Wound Monitor",
   "description": "AI-powered chronic wound assessment",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0b1120",
-  "theme_color": "#0f1629",
+  "background_color": "#151d33",
+  "theme_color": "#1a2340",
   "orientation": "any",
   "icons": [
     {

@@ -1,18 +1,34 @@
 export interface PatientCreate {
   name: string;
   age?: number | null;
+  sex?: string | null;
+  phone?: string | null;
   wound_type?: string | null;
   wound_location?: string | null;
   comorbidities?: string[];
+  referring_physician?: string | null;
+  referring_physician_specialty?: string | null;
+  referring_physician_facility?: string | null;
+  referring_physician_phone?: string | null;
+  referring_physician_email?: string | null;
+  referring_physician_preferred_contact?: string | null;
 }
 
 export interface PatientResponse {
   id: string;
   name: string;
   age: number | null;
+  sex: string | null;
+  phone: string | null;
   wound_type: string | null;
   wound_location: string | null;
   comorbidities: string[];
+  referring_physician: string | null;
+  referring_physician_specialty: string | null;
+  referring_physician_facility: string | null;
+  referring_physician_phone: string | null;
+  referring_physician_email: string | null;
+  referring_physician_preferred_contact: string | null;
   created_at: string;
   latest_trajectory: string | null;
   latest_alert_level: string | null;
@@ -76,6 +92,9 @@ export type WoundType =
   | "diabetic_ulcer"
   | "pressure_ulcer"
   | "venous_ulcer"
+  | "thermal_burn"
+  | "chemical_burn"
+  | "electrical_burn"
   | "other";
 
 export type WoundLocation =
@@ -83,12 +102,19 @@ export type WoundLocation =
   | "right_foot"
   | "sacrum"
   | "leg"
+  | "hand"
+  | "arm"
+  | "torso"
+  | "face"
   | "other";
 
 export const WOUND_TYPES: { value: WoundType; label: string }[] = [
   { value: "diabetic_ulcer", label: "Diabetic Ulcer" },
   { value: "pressure_ulcer", label: "Pressure Ulcer" },
   { value: "venous_ulcer", label: "Venous Ulcer" },
+  { value: "thermal_burn", label: "Thermal Burn" },
+  { value: "chemical_burn", label: "Chemical Burn" },
+  { value: "electrical_burn", label: "Electrical Burn" },
   { value: "other", label: "Other" },
 ];
 
@@ -97,7 +123,23 @@ export const WOUND_LOCATIONS: { value: WoundLocation; label: string }[] = [
   { value: "right_foot", label: "Right Foot" },
   { value: "sacrum", label: "Sacrum" },
   { value: "leg", label: "Leg" },
+  { value: "hand", label: "Hand" },
+  { value: "arm", label: "Arm" },
+  { value: "torso", label: "Torso" },
+  { value: "face", label: "Face / Neck" },
   { value: "other", label: "Other" },
 ];
 
-export type MobileTab = "patients" | "capture" | "reports";
+export interface Referral {
+  id: string;
+  assessment_id: string;
+  patient_id: string;
+  urgency: "routine" | "urgent" | "emergency";
+  physician_name: string | null;
+  physician_contact: string | null;
+  referral_notes: string | null;
+  status: "pending" | "sent" | "reviewed";
+  created_at: string;
+}
+
+export type MobileTab = "patients" | "reports" | "settings";

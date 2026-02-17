@@ -72,15 +72,15 @@ export const ALERT_CONFIG: Record<
   },
   yellow: {
     label: "Caution",
-    textColor: "text-orange-400",
-    bg: "bg-orange-500/10 border-orange-500/20",
-    dotColor: "bg-orange-500",
+    textColor: "text-orange-300",
+    bg: "bg-orange-300/10 border-orange-300/20",
+    dotColor: "bg-orange-300",
   },
   orange: {
     label: "Warning",
-    textColor: "text-orange-700",
-    bg: "bg-orange-50 border-orange-200",
-    dotColor: "bg-orange-500",
+    textColor: "text-orange-300",
+    bg: "bg-orange-300/10 border-orange-300/20",
+    dotColor: "bg-orange-300",
   },
   red: {
     label: "Critical",

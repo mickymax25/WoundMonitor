@@ -64,7 +64,7 @@ function avatarBgColor(alertLevel: string | null): string {
     case "red":
       return "bg-rose-500/15 text-rose-400 border-rose-500/20";
     case "orange":
-      return "bg-orange-500/15 text-orange-400 border-orange-500/20";
+      return "bg-orange-300/10 text-orange-300 border-orange-300/20";
     case "yellow":
       return "bg-sky-500/15 text-sky-400 border-sky-500/20";
     case "green":

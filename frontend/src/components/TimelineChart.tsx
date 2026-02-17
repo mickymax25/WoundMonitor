@@ -2,22 +2,12 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts";
-import {
-  Activity,
-  Loader2,
   TrendingUp,
   TrendingDown,
   Minus,
+  Loader2,
+  BarChart3,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTrajectory } from "@/lib/api";
 import { cn, formatDateShort } from "@/lib/utils";
 import type { TrajectoryPoint } from "@/lib/types";
@@ -27,50 +17,41 @@ interface TimelineChartProps {
   refreshKey: number;
 }
 
-const SERIES = [
-  { key: "tissue_score", name: "Tissue", color: "#059669" },
-  { key: "inflammation_score", name: "Inflammation", color: "#d97706" },
-  { key: "moisture_score", name: "Moisture", color: "#0891b2" },
-  { key: "edge_score", name: "Edge", color: "#7c3aed" },
-] as const;
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-interface CustomTooltipProps {
-  active?: boolean;
-  payload?: Array<{
-    name: string;
-    value: number;
-    color: string;
-  }>;
-  label?: string;
+function avgScore(point: TrajectoryPoint): number {
+  const scores = [
+    point.tissue_score,
+    point.inflammation_score,
+    point.moisture_score,
+    point.edge_score,
+  ].filter((s): s is number => s != null && s > 0);
+  if (scores.length === 0) return 0;
+  return scores.reduce((a, b) => a + b, 0) / scores.length;
 }
 
-function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
-  if (!active || !payload?.length) return null;
+function toHealingScore(raw: number): number {
+  return Math.max(1, Math.min(10, Math.round(raw * 10)));
+}
 
-  return (
-    <div className="bg-card border border-border rounded-xl p-3 shadow-lg">
-      <p className="text-xs text-muted-foreground mb-2 font-medium">{label}</p>
-      <div className="space-y-1.5">
-        {payload.map((entry) => (
-          <div
-            key={entry.name}
-            className="flex items-center justify-between gap-6 text-xs"
-          >
-            <span className="flex items-center gap-2">
-              <span
-                className="w-2.5 h-2.5 rounded-full"
-                style={{ backgroundColor: entry.color }}
-              />
-              <span className="text-foreground/70">{entry.name}</span>
-            </span>
-            <span className="font-mono font-semibold text-foreground">
-              {(entry.value * 100).toFixed(0)}%
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+function barColor(score: number): string {
+  if (score >= 7) return "bg-emerald-500";
+  if (score >= 4) return "bg-orange-300";
+  return "bg-rose-500";
+}
+
+function barBg(score: number): string {
+  if (score >= 7) return "bg-emerald-500/10";
+  if (score >= 4) return "bg-orange-300/10";
+  return "bg-rose-500/10";
+}
+
+function scoreTextColor(score: number): string {
+  if (score >= 7) return "text-emerald-400";
+  if (score >= 4) return "text-orange-300";
+  return "text-rose-400";
 }
 
 function trajectoryIcon(trajectory: string | null) {
@@ -86,23 +67,29 @@ function trajectoryIcon(trajectory: string | null) {
   }
 }
 
-function trajectoryBorderColor(trajectory: string | null): string {
+function trajectoryLabel(trajectory: string | null): string {
   switch (trajectory) {
-    case "improving":
-      return "border-emerald-500/30";
-    case "deteriorating":
-      return "border-rose-500/30";
-    case "stable":
-      return "border-sky-500/30";
-    default:
-      return "border-border";
+    case "improving": return "Improving";
+    case "deteriorating": return "Worsening";
+    case "stable": return "Stable";
+    default: return "Baseline";
   }
 }
 
-export function TimelineChart({
-  patientId,
-  refreshKey,
-}: TimelineChartProps) {
+function trajectoryTextColor(trajectory: string | null): string {
+  switch (trajectory) {
+    case "improving": return "text-emerald-400";
+    case "deteriorating": return "text-rose-400";
+    case "stable": return "text-sky-400";
+    default: return "text-muted-foreground";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export function TimelineChart({ patientId, refreshKey }: TimelineChartProps) {
   const [data, setData] = useState<TrajectoryPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,9 +101,7 @@ export function TimelineChart({
       const points = await getTrajectory(patientId);
       setData(points);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load trajectory."
-      );
+      setError(err instanceof Error ? err.message : "Failed to load trajectory.");
     } finally {
       setLoading(false);
     }
@@ -126,175 +111,99 @@ export function TimelineChart({
     fetchData();
   }, [fetchData, refreshKey]);
 
-  const chartData = data.map((point) => ({
-    ...point,
-    date: formatDateShort(point.visit_date),
-  }));
+  if (loading) {
+    return (
+      <div className="apple-card p-4">
+        <div className="flex items-center justify-center h-32 gap-2">
+          <Loader2 className="h-5 w-5 animate-spin text-primary/60" />
+          <span className="text-xs text-muted-foreground">Loading trend...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="apple-card p-4">
+        <p className="text-sm text-rose-400 text-center py-6">{error}</p>
+      </div>
+    );
+  }
+
+  if (data.length < 2) {
+    return (
+      <div className="apple-card p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <BarChart3 className="h-4 w-4 text-primary" />
+          <span className="text-sm font-semibold text-foreground">Healing Trend</span>
+        </div>
+        <p className="text-xs text-muted-foreground text-center py-6">
+          At least 2 visits needed to show the healing trend.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <Card className="h-full flex flex-col border-border shadow-sm">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2 font-semibold">
-          <Activity className="h-4 w-4 text-primary" />
-          Wound Trajectory
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex-1 min-h-0">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center h-48 gap-3">
-            <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center border border-border">
-              <Loader2 className="h-6 w-6 animate-spin text-primary/60" />
-            </div>
-            <p className="text-xs text-muted-foreground">Loading trajectory...</p>
-          </div>
-        ) : error ? (
-          <p className="text-sm text-rose-400 text-center py-8">
-            {error}
-          </p>
-        ) : data.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
-            <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center mb-3 border border-border">
-              <Activity className="h-7 w-7 opacity-40" />
-            </div>
-            <p className="text-sm font-medium">No assessment data yet</p>
-            <p className="text-xs mt-1 text-muted-foreground/60">
-              Analyze a wound photo to begin tracking.
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Legend */}
-            <div className="flex flex-wrap gap-3 mb-4">
-              {SERIES.map((s) => (
-                <div key={s.key} className="flex items-center gap-1.5">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full"
-                    style={{ backgroundColor: s.color }}
-                  />
-                  <span className="text-xs text-muted-foreground font-medium">
-                    {s.name}
+    <div className="apple-card p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="h-4 w-4 text-primary" />
+          <span className="text-sm font-semibold text-foreground">Healing Trend</span>
+        </div>
+        <div className="flex items-center gap-1 text-[11px]">
+          <span className="text-muted-foreground">Scale:</span>
+          <span className="text-rose-400">1</span>
+          <span className="text-muted-foreground/50">→</span>
+          <span className="text-emerald-400">10</span>
+        </div>
+      </div>
+
+      {/* Visit bars */}
+      <div className="space-y-2.5">
+        {data.map((point, idx) => {
+          const raw = avgScore(point);
+          const healing = toHealingScore(raw);
+          const pct = Math.round(raw * 100);
+
+          return (
+            <div key={idx} className={cn("rounded-lg p-2.5 border border-border/30", barBg(healing))}>
+              {/* Row: date + trajectory + score */}
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    Visit {idx + 1}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground/60">
+                    {formatDateShort(point.visit_date)}
                   </span>
                 </div>
-              ))}
-            </div>
+                <div className="flex items-center gap-1.5">
+                  {trajectoryIcon(point.trajectory)}
+                  <span className={cn("text-[11px] font-medium", trajectoryTextColor(point.trajectory))}>
+                    {trajectoryLabel(point.trajectory)}
+                  </span>
+                </div>
+              </div>
 
-            {/* Area Chart */}
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={chartData}
-                  margin={{ top: 5, right: 10, left: -15, bottom: 5 }}
-                >
-                  <defs>
-                    {SERIES.map((s) => (
-                      <linearGradient
-                        key={s.key}
-                        id={`gradient-${s.key}`}
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor={s.color}
-                          stopOpacity={0.2}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor={s.color}
-                          stopOpacity={0.02}
-                        />
-                      </linearGradient>
-                    ))}
-                  </defs>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="hsl(228 28% 22%)"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 11, fill: "hsl(215 15% 55%)" }}
-                    stroke="hsl(228 28% 22%)"
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    domain={[0, 1]}
-                    tick={{ fontSize: 11, fill: "hsl(215 15% 55%)" }}
-                    stroke="hsl(228 28% 22%)"
-                    tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <Tooltip
-                    content={<CustomTooltip />}
-                    cursor={{
-                      stroke: "hsl(228 28% 28%)",
-                      strokeDasharray: "4 4",
-                    }}
-                  />
-                  {SERIES.map((s) => (
-                    <Area
-                      key={s.key}
-                      type="monotone"
-                      dataKey={s.key}
-                      name={s.name}
-                      stroke={s.color}
-                      strokeWidth={2}
-                      fill={`url(#gradient-${s.key})`}
-                      dot={{
-                        r: 4,
-                        fill: s.color,
-                        stroke: "hsl(230 35% 12%)",
-                        strokeWidth: 2,
-                      }}
-                      activeDot={{
-                        r: 6,
-                        fill: s.color,
-                        stroke: "hsl(230 35% 12%)",
-                        strokeWidth: 2,
-                      }}
-                      connectNulls
-                    />
-                  ))}
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Visit History thumbnails */}
-            <div className="mt-5 pt-4 border-t border-border">
-              <p className="text-xs text-muted-foreground mb-3 font-medium uppercase tracking-wider">
-                Visit History
-              </p>
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {data.map((point, idx) => (
+              {/* Bar */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 rounded-full h-2 bg-muted/50">
                   <div
-                    key={idx}
-                    className="shrink-0 text-center"
-                  >
-                    <div
-                      className={cn(
-                        "w-14 h-14 rounded-lg bg-[var(--surface-2)] border flex flex-col items-center justify-center gap-0.5 transition-colors",
-                        trajectoryBorderColor(point.trajectory)
-                      )}
-                    >
-                      <span className="text-xs font-bold text-foreground/80">
-                        #{idx + 1}
-                      </span>
-                      {trajectoryIcon(point.trajectory)}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 font-medium">
-                      {formatDateShort(point.visit_date)}
-                    </p>
-                  </div>
-                ))}
+                    className={cn("rounded-full h-2 transition-all duration-500", barColor(healing))}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <span className={cn("text-sm font-bold tabular-nums w-8 text-right", scoreTextColor(healing))}>
+                  {healing}
+                  <span className="text-[9px] font-normal text-muted-foreground/40">/10</span>
+                </span>
               </div>
             </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+          );
+        })}
+      </div>
+    </div>
   );
 }

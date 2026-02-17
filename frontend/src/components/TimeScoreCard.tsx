@@ -37,19 +37,19 @@ function healingStatus(score: number): string {
 
 function statusColor(score: number): string {
   if (score >= 0.7) return "text-emerald-400";
-  if (score >= 0.4) return "text-orange-400";
+  if (score >= 0.4) return "text-orange-300";
   return "text-rose-400";
 }
 
 function barColor(score: number): string {
   if (score >= 0.7) return "bg-emerald-400";
-  if (score >= 0.4) return "bg-orange-400";
+  if (score >= 0.4) return "bg-orange-300";
   return "bg-rose-400";
 }
 
 function statusBadge(score: number): string {
   if (score >= 0.7) return "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/15";
-  if (score >= 0.4) return "bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/15";
+  if (score >= 0.4) return "bg-orange-300/10 text-orange-300 ring-1 ring-orange-300/15";
   return "bg-rose-500/10 text-rose-400 ring-1 ring-rose-500/15";
 }
 
@@ -78,8 +78,8 @@ const DIMENSION_CONFIG: Record<
     label: "Inflammation",
     measures: "Infection & inflammation signs",
     icon: Flame,
-    accent: "bg-orange-400",
-    iconColor: "text-orange-500",
+    accent: "bg-orange-300",
+    iconColor: "text-orange-300",
   },
   moisture: {
     label: "Moisture",

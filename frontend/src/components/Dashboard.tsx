@@ -9,7 +9,6 @@ import {
   RefreshCw,
   AlertCircle,
   ChevronRight,
-  Camera,
   FileText,
   TrendingUp,
   TrendingDown,
@@ -20,6 +19,7 @@ import {
   Shield,
   Zap,
   Clock,
+  Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,7 @@ import { TimelineChart } from "@/components/TimelineChart";
 import { ReportPanel } from "@/components/ReportPanel";
 import { AssessmentHistory } from "@/components/AssessmentHistory";
 import { PatientList } from "@/components/PatientList";
+import { SettingsPanel } from "@/components/SettingsPanel";
 import { listPatients, listPatientAssessments } from "@/lib/api";
 import { cn, alertDotColor } from "@/lib/utils";
 import type { PatientResponse, AssessmentResponse, AnalysisResult, MobileTab } from "@/lib/types";
@@ -105,15 +106,15 @@ interface TabDefinition {
 
 const MOBILE_TABS: TabDefinition[] = [
   { id: "patients", label: "Patients", icon: Users },
-  { id: "capture", label: "Assess", icon: Camera },
-  { id: "reports", label: "Report", icon: FileText },
+  { id: "reports", label: "Dashboard", icon: FileText },
+  { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
 // ---------------------------------------------------------------------------
 // Main Dashboard
 // ---------------------------------------------------------------------------
 
-export default function Dashboard() {
+export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
   const [patients, setPatients] = useState<PatientResponse[]>([]);
   const [loadingPatients, setLoadingPatients] = useState(true);
   const [patientFetchError, setPatientFetchError] = useState<string | null>(null);
@@ -124,6 +125,7 @@ export default function Dashboard() {
   // Mobile tab navigation
   const [activeTab, setActiveTab] = useState<MobileTab>("patients");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showAssessForm, setShowAssessForm] = useState(false);
 
   const fetchPatients = useCallback(async () => {
     setLoadingPatients(true);
@@ -146,9 +148,10 @@ export default function Dashboard() {
     async (patient: PatientResponse) => {
       setSelectedPatient(patient);
       setAnalysisResult(null);
+      setShowAssessForm(false);
       setTrajectoryRefresh((r) => r + 1);
-      // Navigate to assessment tab after selecting a patient on mobile
-      setActiveTab("capture");
+      // Navigate to report tab after selecting a patient on mobile
+      setActiveTab("reports");
 
       try {
         const assessments = await listPatientAssessments(patient.id);
@@ -181,15 +184,51 @@ export default function Dashboard() {
     setPatients((prev) => [patient, ...prev]);
     setSelectedPatient(patient);
     setAnalysisResult(null);
-    setActiveTab("capture");
+    setShowAssessForm(false);
+    setActiveTab("reports");
   }, []);
+
+  const handleStartAssessment = useCallback(
+    async (patient: PatientResponse) => {
+      setSelectedPatient(patient);
+      setShowAssessForm(true);
+      setActiveTab("reports");
+      setTrajectoryRefresh((r) => r + 1);
+
+      // Load existing analysis results (same logic as handleSelectPatient)
+      try {
+        const assessments = await listPatientAssessments(patient.id);
+        const analyzed = assessments
+          .filter((a) => a.time_classification !== null)
+          .sort((a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime());
+        if (analyzed.length > 0) {
+          const latest = analyzed[0];
+          setAnalysisResult({
+            assessment_id: latest.id,
+            time_classification: latest.time_classification!,
+            zeroshot_scores: latest.zeroshot_scores ?? {},
+            trajectory: latest.trajectory ?? "baseline",
+            change_score: latest.change_score ?? null,
+            contradiction_flag: latest.contradiction_flag ?? false,
+            contradiction_detail: latest.contradiction_detail ?? null,
+            report_text: latest.report_text ?? "",
+            alert_level: latest.alert_level ?? "green",
+            alert_detail: latest.alert_detail ?? null,
+          });
+        }
+      } catch {
+        // Silently fail — dashboard will show without previous results
+      }
+    },
+    []
+  );
 
   const handleAnalysisComplete = useCallback(
     (result: AnalysisResult) => {
       setAnalysisResult(result);
       setTrajectoryRefresh((r) => r + 1);
+      setShowAssessForm(false);
       fetchPatients();
-      // Navigate to report tab after analysis completes on mobile
       setActiveTab("reports");
     },
     [fetchPatients]
@@ -272,7 +311,7 @@ export default function Dashboard() {
       if (urgent && patient.latest_alert_level === "red")
         return "bg-gradient-to-br from-rose-500/20 to-rose-600/10 text-rose-400 ring-1 ring-rose-500/20";
       if (urgent)
-        return "bg-gradient-to-br from-orange-500/20 to-orange-600/10 text-orange-400 ring-1 ring-orange-500/20";
+        return "bg-gradient-to-br from-orange-300/20 to-orange-600/10 text-orange-300 ring-1 ring-orange-300/20";
       if (patient.latest_trajectory === "improving")
         return "bg-gradient-to-br from-emerald-500/20 to-teal-600/10 text-emerald-400 ring-1 ring-emerald-500/20";
       if (patient.latest_trajectory === "stable")
@@ -284,8 +323,8 @@ export default function Dashboard() {
     function accentColor(level: string | null): string {
       switch (level) {
         case "red": return "bg-rose-500";
-        case "orange": return "bg-orange-500";
-        case "yellow": return "bg-orange-400";
+        case "orange": return "bg-orange-300";
+        case "yellow": return "bg-orange-300";
         case "green": return "bg-emerald-500";
         default: return "bg-slate-600";
       }
@@ -295,12 +334,10 @@ export default function Dashboard() {
     function PatientCard({ patient, urgent, index }: { patient: PatientResponse; urgent?: boolean; index: number }) {
       const isSelected = selectedPatient?.id === patient.id;
       return (
-        <button
-          type="button"
-          onClick={() => handleSelectPatient(patient)}
+        <div
           className={cn(
-            "w-full text-left patient-card overflow-hidden animate-slide-up",
-            isSelected && "ring-1 ring-primary/40"
+            "w-full text-left overflow-hidden transition-colors",
+            isSelected ? "bg-primary/5" : ""
           )}
           style={{ animationDelay: `${index * 60}ms` }}
         >
@@ -308,9 +345,13 @@ export default function Dashboard() {
             {/* Accent line */}
             <div className={cn("w-[3px] shrink-0 rounded-l-[18px]", accentColor(patient.latest_alert_level))} />
 
-            <div className="flex-1 flex items-start gap-3.5 p-3.5">
-              {/* Avatar */}
-              <div className="relative shrink-0">
+            <div className="flex-1 flex items-start gap-3.5 p-4">
+              {/* Avatar — tappable to go to dashboard */}
+              <button
+                type="button"
+                onClick={() => handleSelectPatient(patient)}
+                className="relative shrink-0 active:scale-95 transition-transform"
+              >
                 <div
                   className={cn(
                     "w-12 h-12 rounded-2xl flex items-center justify-center text-[13px] font-bold tracking-wide",
@@ -327,43 +368,48 @@ export default function Dashboard() {
                     alertDotColor(patient.latest_alert_level)
                   )}
                 />
-              </div>
+              </button>
 
-              {/* Content */}
-              <div className="flex-1 min-w-0 pt-0.5">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[15px] font-semibold text-foreground truncate leading-tight tracking-tight">
+              {/* Content — tappable to go to dashboard */}
+              <button
+                type="button"
+                onClick={() => handleSelectPatient(patient)}
+                className="flex-1 min-w-0 text-left active:opacity-70 transition-opacity"
+              >
+                {/* Name row */}
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-[15px] font-bold text-foreground truncate leading-tight tracking-tight">
                     {patient.name}
                   </p>
-                  <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums flex items-center gap-1">
+                  <span className="text-[11px] text-muted-foreground/60 shrink-0 tabular-nums flex items-center gap-1">
                     <Clock className="h-2.5 w-2.5" />
                     {relativeTime(patient.created_at)}
                   </span>
                 </div>
 
-                <p className="text-[12px] text-muted-foreground truncate mt-1 leading-tight">
+                {/* Wound info — higher contrast */}
+                <p className="text-[13px] text-foreground/50 truncate mt-1.5 leading-tight">
                   {woundLabel(patient.wound_type, patient.wound_location)}
-                  {patient.age ? ` · ${patient.age}y` : ""}
+                  {patient.age ? <span className="text-foreground/30"> · {patient.age}y</span> : ""}
                 </p>
 
-                {/* Badges row */}
-                <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+                {/* Badges row — more spacing */}
+                <div className="flex items-center gap-2 mt-2.5 flex-wrap">
                   <TrajectoryBadge trajectory={patient.latest_trajectory} />
                   {patient.comorbidities.length > 0 && (
                     <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full ring-1 ring-violet-500/15">
                       {patient.comorbidities.length} comorb.
                     </span>
                   )}
-                  <span className="text-[10px] text-muted-foreground ml-auto tabular-nums">
+                  <span className="text-[10px] text-muted-foreground/40 ml-auto tabular-nums">
                     {patient.assessment_count} visit{patient.assessment_count !== 1 ? "s" : ""}
                   </span>
                 </div>
-              </div>
+              </button>
 
-              <ChevronRight className="h-4 w-4 text-muted-foreground/30 shrink-0 mt-1.5" />
             </div>
           </div>
-        </button>
+        </div>
       );
     }
 
@@ -420,10 +466,13 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Search + Actions */}
+        </div>
+
+        {/* ---- SCROLLABLE CONTENT ---- */}
+        <div className="flex-1 overflow-y-auto px-4 pb-24">
+          {/* Search + Actions — inside scroll area */}
           {!loadingPatients && patients.length > 0 && (
-            <div className="mt-4 space-y-2.5 animate-slide-up" style={{ animationDelay: "160ms" }}>
-              {/* Search bar */}
+            <div className="apple-card p-3 mb-4 animate-slide-up" style={{ animationDelay: "160ms" }}>
               <div className="relative">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 pointer-events-none" />
                 <input
@@ -431,20 +480,18 @@ export default function Dashboard() {
                   placeholder="Search patients..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="search-input w-full h-11 pl-10 pr-4 text-[13px] text-foreground
-                             placeholder:text-muted-foreground/40
-                             focus:outline-none"
+                  className="w-full h-10 pl-10 pr-4 text-[13px] text-foreground bg-[var(--surface-2)] rounded-xl
+                             placeholder:text-muted-foreground/40 border border-border/30
+                             focus:outline-none focus:ring-1 focus:ring-primary/30"
                 />
               </div>
-
-              {/* Quick actions row */}
-              <div className="flex gap-2">
+              <div className="flex gap-2 mt-2.5">
                 <NewPatientDialog
                   onCreated={handlePatientCreated}
                   trigger={
                     <button
                       type="button"
-                      className="flex-1 flex items-center justify-center gap-2 h-11 rounded-[14px]
+                      className="flex-1 flex items-center justify-center gap-2 h-10 rounded-xl
                                  bg-primary/15 text-primary text-[13px] font-semibold
                                  ring-1 ring-primary/20
                                  active:bg-primary/25 transition-colors"
@@ -457,23 +504,20 @@ export default function Dashboard() {
                 {selectedPatient && (
                   <button
                     type="button"
-                    onClick={() => setActiveTab("capture")}
-                    className="flex-1 flex items-center justify-center gap-2 h-11 rounded-[14px]
+                    onClick={() => handleStartAssessment(selectedPatient)}
+                    className="flex-1 flex items-center justify-center gap-2 h-10 rounded-xl
                                bg-emerald-500/15 text-emerald-400 text-[13px] font-semibold
                                ring-1 ring-emerald-500/20
                                active:bg-emerald-500/25 transition-colors"
                   >
-                    <Camera className="h-4 w-4" />
+                    <Stethoscope className="h-4 w-4" />
                     Assess
                   </button>
                 )}
               </div>
             </div>
           )}
-        </div>
 
-        {/* ---- SCROLLABLE CONTENT ---- */}
-        <div className="flex-1 overflow-y-auto px-4 pb-24">
           {loadingPatients ? (
             <div className="space-y-3 px-1 mt-2">
               {[1, 2, 3, 4].map((i) => (
@@ -547,65 +591,22 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="mt-1">
-              {/* Alert banner */}
-              {totalNeedingAttention > 0 && !searchQuery && (
-                <div className={cn(
-                  "rounded-2xl p-3.5 mb-4 animate-slide-up ring-1",
-                  totalCritical > 0
-                    ? "bg-rose-500/8 ring-rose-500/15"
-                    : "bg-orange-500/8 ring-orange-500/15"
-                )} style={{ animationDelay: "200ms" }}>
-                  <div className="flex items-start gap-3">
-                    <div className={cn(
-                      "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ring-1",
-                      totalCritical > 0
-                        ? "bg-rose-500/15 ring-rose-500/20 text-rose-400"
-                        : "bg-orange-500/15 ring-orange-500/20 text-orange-400"
-                    )}>
-                      <AlertTriangle className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={cn("text-[13px] font-semibold leading-tight", totalCritical > 0 ? "text-rose-300" : "text-orange-300")}>
-                        {totalNeedingAttention} patient{totalNeedingAttention !== 1 ? "s" : ""} need{totalNeedingAttention === 1 ? "s" : ""} attention
-                      </p>
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {patients.filter(needsAttention).slice(0, 3).map((p) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => handleSelectPatient(p)}
-                            className={cn(
-                              "text-[10px] font-semibold px-2.5 py-1 rounded-full active:opacity-70 ring-1",
-                              p.latest_alert_level === "red"
-                                ? "bg-rose-500/10 text-rose-400 ring-rose-500/20"
-                                : "bg-orange-500/10 text-orange-400 ring-orange-500/20"
-                            )}
-                          >
-                            {p.name.split(" ")[0]}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Needs Attention section */}
               {attentionPatients.length > 0 && (
-                <div className="mb-5">
-                  <div className="flex items-center gap-2.5 mb-3 px-1">
+                <div className="apple-card overflow-hidden mb-4">
+                  <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border/30">
                     <div className="w-5 h-5 rounded-md bg-rose-500/15 flex items-center justify-center ring-1 ring-rose-500/20">
                       <AlertTriangle className="h-2.5 w-2.5 text-rose-400" />
                     </div>
                     <h2 className="text-[11px] font-bold text-rose-400/80 uppercase tracking-[0.1em]">
                       Needs Attention
                     </h2>
-                    <div className="flex-1 h-px bg-rose-500/10 ml-1" />
+                    <div className="flex-1" />
                     <span className="text-[11px] font-bold text-rose-400 tabular-nums">
                       {attentionPatients.length}
                     </span>
                   </div>
-                  <div className="space-y-2.5">
+                  <div className="divide-y divide-border/20">
                     {attentionPatients.map((patient, i) => (
                       <PatientCard key={patient.id} patient={patient} urgent index={i} />
                     ))}
@@ -615,20 +616,20 @@ export default function Dashboard() {
 
               {/* Other patients */}
               {otherPatients.length > 0 && (
-                <div className="mb-4">
-                  <div className="flex items-center gap-2.5 mb-3 px-1">
+                <div className="apple-card overflow-hidden mb-4">
+                  <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border/30">
                     <div className="w-5 h-5 rounded-md bg-muted flex items-center justify-center ring-1 ring-border">
                       <Users className="h-2.5 w-2.5 text-muted-foreground" />
                     </div>
                     <h2 className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.1em]">
                       {attentionPatients.length > 0 ? "Monitoring" : "All Patients"}
                     </h2>
-                    <div className="flex-1 h-px bg-border ml-1" />
+                    <div className="flex-1" />
                     <span className="text-[11px] text-muted-foreground tabular-nums">
                       {otherPatients.length}
                     </span>
                   </div>
-                  <div className="space-y-2.5">
+                  <div className="divide-y divide-border/20">
                     {otherPatients.map((patient, i) => (
                       <PatientCard key={patient.id} patient={patient} index={i + attentionPatients.length} />
                     ))}
@@ -713,29 +714,7 @@ export default function Dashboard() {
   }
 
   // ---------------------------------------------------------------------------
-  // Mobile: Assess Tab
-  // ---------------------------------------------------------------------------
-
-  function MobileAssessTab() {
-    return (
-      <div className="h-full flex flex-col">
-        <MobilePatientHeader />
-        {selectedPatient ? (
-          <div className="flex-1 overflow-y-auto px-4 py-4">
-            <AssessmentPanel
-              patient={selectedPatient}
-              onAnalysisComplete={handleAnalysisComplete}
-            />
-          </div>
-        ) : (
-          <NoPatientSelected actionLabel="begin a wound assessment" />
-        )}
-      </div>
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Mobile: Report Tab (results + timeline together)
+  // Mobile: Dashboard Tab (assessment + results combined)
   // ---------------------------------------------------------------------------
 
   function MobileReportTab() {
@@ -744,16 +723,54 @@ export default function Dashboard() {
         <MobilePatientHeader />
         {selectedPatient ? (
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-            {analysisResult ? (
+            {/* Assessment form — collapsible section above the dashboard */}
+            {showAssessForm ? (
+              <div className="apple-card overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30">
+                  <div className="flex items-center gap-2">
+                    <Stethoscope className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-[12px] font-semibold text-foreground">New Assessment</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAssessForm(false)}
+                    className="text-[12px] text-muted-foreground active:text-foreground transition-colors px-2 py-1 -mr-2"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <div className="p-0">
+                  <AssessmentPanel
+                    patient={selectedPatient}
+                    onAnalysisComplete={handleAnalysisComplete}
+                  />
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowAssessForm(true)}
+                className="w-full flex items-center justify-center gap-2.5 h-12 rounded-2xl
+                           bg-primary/15 text-primary text-[14px] font-semibold
+                           ring-1 ring-primary/20 active:bg-primary/25 transition-colors"
+              >
+                <Stethoscope className="h-4 w-4" />
+                New Assessment
+              </button>
+            )}
+
+            {/* Dashboard content — always visible when results exist */}
+            {analysisResult && (
               <>
                 <ReportPanel
                   result={analysisResult}
+                  patientId={selectedPatient.id}
                   patientName={selectedPatient.name}
                   woundType={selectedPatient.wound_type}
-                />
-                <TimelineChart
-                  patientId={selectedPatient.id}
-                  refreshKey={trajectoryRefresh}
+                  referringPhysician={selectedPatient.referring_physician}
+                  referringPhysicianPhone={selectedPatient.referring_physician_phone}
+                  referringPhysicianEmail={selectedPatient.referring_physician_email}
+                  referringPhysicianPreferredContact={selectedPatient.referring_physician_preferred_contact}
                 />
                 <AssessmentHistory
                   patientId={selectedPatient.id}
@@ -762,25 +779,18 @@ export default function Dashboard() {
                   refreshKey={trajectoryRefresh}
                 />
               </>
-            ) : (
+            )}
+
+            {/* Empty state when no analysis yet and form is closed */}
+            {!analysisResult && !showAssessForm && (
               <div className="flex flex-col items-center justify-center py-16">
-                <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4 ring-1 ring-border">
-                  <FileText className="h-8 w-8 text-muted-foreground/30" />
+                <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-4 ring-1 ring-border">
+                  <FileText className="h-6 w-6 text-muted-foreground/30" />
                 </div>
-                <p className="text-sm font-medium text-foreground mb-1">No report yet</p>
-                <p className="text-xs text-muted-foreground text-center max-w-[260px] mb-5">
-                  Take a wound photo and run analysis to generate a clinical report.
+                <p className="text-[14px] font-semibold text-foreground mb-1">No assessments yet</p>
+                <p className="text-[12px] text-muted-foreground text-center max-w-[240px] leading-relaxed">
+                  Run a first assessment to see the clinical dashboard for this patient.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("capture")}
-                  className="flex items-center gap-2 px-5 h-10 rounded-xl
-                             bg-primary/15 text-primary text-[13px] font-semibold
-                             ring-1 ring-primary/20 active:bg-primary/25 transition-colors"
-                >
-                  <Camera className="h-4 w-4" />
-                  Go to Assessment
-                </button>
               </div>
             )}
           </div>
@@ -792,13 +802,26 @@ export default function Dashboard() {
   }
 
   // ---------------------------------------------------------------------------
+  // Mobile: Settings Tab
+  // ---------------------------------------------------------------------------
+
+  function MobileSettingsTab() {
+    return (
+      <div className="h-full overflow-y-auto px-4 py-4">
+        <SettingsPanel onSignOut={onSignOut} />
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Mobile: Bottom Tab Bar
   // ---------------------------------------------------------------------------
 
   function MobileTabBar() {
     return (
       <nav
-        className="shrink-0 bg-[var(--surface-1)]/95 backdrop-blur-xl safe-area-bottom border-t border-border/50"
+        className="shrink-0 bg-[var(--surface-1)]/95 backdrop-blur-xl border-t border-border/50"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
         role="tablist"
         aria-label="Main navigation"
       >
@@ -814,7 +837,10 @@ export default function Dashboard() {
                 type="button"
                 role="tab"
                 aria-selected={isActive}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  if (tab.id === "reports") setShowAssessForm(false);
+                }}
                 className={cn(
                   "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-[50px] transition-all relative",
                   isActive ? "text-primary" : "text-muted-foreground/50"
@@ -859,7 +885,7 @@ export default function Dashboard() {
               <Heart className="h-3.5 w-3.5 text-primary" />
             </div>
             <h1 className="text-base font-bold text-foreground leading-tight tracking-tight">
-              WoundChrono
+              Wound Monitor
             </h1>
           </div>
 
@@ -924,8 +950,13 @@ export default function Dashboard() {
               {analysisResult && (
                 <ReportPanel
                   result={analysisResult}
+                  patientId={selectedPatient.id}
                   patientName={selectedPatient.name}
                   woundType={selectedPatient.wound_type}
+                  referringPhysician={selectedPatient.referring_physician}
+                  referringPhysicianPhone={selectedPatient.referring_physician_phone}
+                  referringPhysicianEmail={selectedPatient.referring_physician_email}
+                  referringPhysicianPreferredContact={selectedPatient.referring_physician_preferred_contact}
                 />
               )}
             </>
@@ -974,8 +1005,8 @@ export default function Dashboard() {
         {/* Tab content area */}
         <div className="flex-1 min-h-0 overflow-hidden">
           {activeTab === "patients" && <MobilePatientsTab />}
-          {activeTab === "capture" && <MobileAssessTab />}
           {activeTab === "reports" && <MobileReportTab />}
+          {activeTab === "settings" && <MobileSettingsTab />}
         </div>
 
         {/* Bottom tab bar */}

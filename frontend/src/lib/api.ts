@@ -4,6 +4,7 @@ import type {
   AssessmentResponse,
   AnalysisResult,
   TrajectoryPoint,
+  Referral,
 } from "./types";
 
 const API_BASE =
@@ -119,6 +120,25 @@ export async function listPatientAssessments(
   return request<AssessmentResponse[]>(
     `/api/v1/patients/${patientId}/assessments`
   );
+}
+
+export async function createReferral(data: {
+  assessment_id: string;
+  patient_id: string;
+  urgency: string;
+  physician_name?: string;
+  physician_contact?: string;
+  referral_notes?: string;
+}): Promise<Referral> {
+  return request<Referral>("/api/v1/referrals", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function getReferralSummaryUrl(referralId: string): string {
+  return `${API_BASE}/api/v1/referrals/${referralId}/summary`;
 }
 
 export { ApiError };

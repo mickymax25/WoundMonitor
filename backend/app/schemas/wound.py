@@ -12,18 +12,34 @@ from pydantic import BaseModel
 class PatientCreate(BaseModel):
     name: str
     age: int | None = None
+    sex: str | None = None  # male | female
+    phone: str | None = None
     wound_type: str | None = None  # diabetic_ulcer | pressure_ulcer | venous_ulcer | other
     wound_location: str | None = None
     comorbidities: list[str] = []
+    referring_physician: str | None = None
+    referring_physician_specialty: str | None = None
+    referring_physician_facility: str | None = None
+    referring_physician_phone: str | None = None
+    referring_physician_email: str | None = None
+    referring_physician_preferred_contact: str | None = None  # phone | email | whatsapp
 
 
 class PatientResponse(BaseModel):
     id: str
     name: str
     age: int | None = None
+    sex: str | None = None
+    phone: str | None = None
     wound_type: str | None = None
     wound_location: str | None = None
     comorbidities: list[str] = []
+    referring_physician: str | None = None
+    referring_physician_specialty: str | None = None
+    referring_physician_facility: str | None = None
+    referring_physician_phone: str | None = None
+    referring_physician_email: str | None = None
+    referring_physician_preferred_contact: str | None = None
     created_at: str
     latest_trajectory: str | None = None
     latest_alert_level: str | None = None
@@ -102,3 +118,32 @@ class AnalysisResult(BaseModel):
     report_text: str
     alert_level: str
     alert_detail: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Referrals
+# ---------------------------------------------------------------------------
+
+class ReferralCreate(BaseModel):
+    assessment_id: str
+    patient_id: str
+    urgency: str = "routine"  # routine | urgent | emergency
+    physician_name: str | None = None
+    physician_contact: str | None = None
+    referral_notes: str | None = None
+
+
+class ReferralResponse(BaseModel):
+    id: str
+    assessment_id: str
+    patient_id: str
+    urgency: str
+    physician_name: str | None = None
+    physician_contact: str | None = None
+    referral_notes: str | None = None
+    status: str
+    created_at: str
+
+
+class ReferralUpdate(BaseModel):
+    status: str  # pending | sent | reviewed

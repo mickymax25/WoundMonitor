@@ -35,6 +35,24 @@ E (Edge): 0.0=undermined/tunneling → 0.3=rolled edges → 0.6=attached/contrac
 Respond with JSON only:
 {"tissue":{"type":"what you observe","score":0.00},"inflammation":{"type":"what you observe","score":0.00},"moisture":{"type":"what you observe","score":0.00},"edge":{"type":"what you observe","score":0.00}}"""
 
+BURN_CLASSIFICATION_PROMPT = """\
+Burn care specialist. Classify this burn wound photograph using 4 clinical dimensions.
+Score each dimension independently from 0.0 (worst) to 1.0 (best/healed).
+Be specific: describe what you see in the image.
+
+T (Tissue/Depth): 0.0=deep full-thickness eschar/charring → 0.3=deep partial-thickness with necrosis → 0.5=superficial partial-thickness with blistering → 0.7=debrided clean wound bed → 0.9=active re-epithelialization → 1.0=healed.
+I (Inflammation): 0.0=burn wound sepsis/invasive infection → 0.3=cellulitis/purulent exudate → 0.5=significant periwound erythema → 0.7=mild erythema → 0.9=minimal → 1.0=none.
+M (Moisture): 0.0=desiccated eschar or heavily exudative → 0.3=imbalanced → 0.5=moderately excessive → 0.7=nearly balanced → 0.9=optimal → 1.0=perfect.
+E (Edge/Re-epithelialization): 0.0=no advancement/graft failure → 0.3=scattered epithelial islands → 0.5=partial re-epithelialization from edges → 0.7=confluent epithelial coverage → 0.9=near-complete closure → 1.0=fully closed.
+
+Respond with JSON only:
+{"tissue":{"type":"what you observe","score":0.00},"inflammation":{"type":"what you observe","score":0.00},"moisture":{"type":"what you observe","score":0.00},"edge":{"type":"what you observe","score":0.00}}"""
+
+
+def _is_burn(wound_type: str | None) -> bool:
+    """Check if the wound type is a burn."""
+    return wound_type is not None and "burn" in wound_type.lower()
+
 
 def _build_report_prompt(
     time_scores: dict[str, Any],
@@ -48,11 +66,21 @@ def _build_report_prompt(
     wound_location: str | None = None,
     visit_date: str | None = None,
 ) -> str:
-    parts = [
-        "You are a wound care specialist. Analyze the wound image and data below.",
-        "Respond with a JSON object ONLY. No markdown, no explanation outside the JSON.",
-        "",
-    ]
+    is_burn = _is_burn(wound_type)
+    if is_burn:
+        parts = [
+            "You are a burn care specialist. Analyze the burn wound image and data below.",
+            "Consider burn depth (superficial/partial/full-thickness), re-epithelialization status, and graft integration if applicable.",
+            "Include burn-specific recommendations: topical agents, grafting needs, hypertrophic scar prevention, and burn center referral criteria.",
+            "Respond with a JSON object ONLY. No markdown, no explanation outside the JSON.",
+            "",
+        ]
+    else:
+        parts = [
+            "You are a wound care specialist. Analyze the wound image and data below.",
+            "Respond with a JSON object ONLY. No markdown, no explanation outside the JSON.",
+            "",
+        ]
 
     # Patient context section
     parts.append("## Patient Information")
@@ -331,6 +359,56 @@ _EDGE_LABELS = [
     "strong epithelial advancement",
 ]
 
+# Burn-specific mock labels — same 10-bucket structure
+_BURN_TISSUE_LABELS = [
+    "deep full-thickness charring",
+    "full-thickness eschar",
+    "deep partial-thickness with necrosis",
+    "deep partial-thickness blistering",
+    "superficial partial-thickness with intact blisters",
+    "debrided superficial partial wound bed",
+    "clean granulating burn wound",
+    "early re-epithelialization from edges",
+    "confluent re-epithelialization",
+    "healed with minimal scarring",
+]
+_BURN_INFLAMMATION_LABELS = [
+    "burn wound sepsis",
+    "invasive wound infection",
+    "cellulitis with purulent exudate",
+    "moderate periwound cellulitis",
+    "significant periwound erythema",
+    "moderate erythema",
+    "mild periwound erythema",
+    "minimal inflammatory signs",
+    "trace periwound warmth",
+    "clean periwound skin",
+]
+_BURN_MOISTURE_LABELS = [
+    "desiccated eschar",
+    "very dry burn wound",
+    "dry wound bed with cracking",
+    "heavily exudative",
+    "moderately excessive exudate",
+    "slightly imbalanced moisture",
+    "nearly balanced",
+    "adequately moist wound bed",
+    "well-balanced moisture",
+    "optimal moisture",
+]
+_BURN_EDGE_LABELS = [
+    "no epithelial advancement",
+    "graft failure with exposed bed",
+    "scattered epithelial islands",
+    "early marginal re-epithelialization",
+    "partial confluent re-epithelialization",
+    "graft take with partial integration",
+    "good graft take",
+    "advancing epithelial front",
+    "near-complete epithelial closure",
+    "complete wound closure",
+]
+
 
 def _hash_to_score(seed: str, dimension: str, low: float = 0.1, high: float = 0.95) -> float:
     """Derive a deterministic score from a seed string and dimension name.
@@ -351,11 +429,15 @@ def _label_for_score(score: float, labels: list[str]) -> str:
     return labels[idx]
 
 
-def _mock_time_classification(image_path: str | None = None) -> dict[str, Any]:
+def _mock_time_classification(
+    image_path: str | None = None,
+    wound_type: str | None = None,
+) -> dict[str, Any]:
     """Return deterministic, varied TIME scores based on the image path hash.
 
     The same image always produces identical scores. Different images produce
     different but clinically plausible scores across the full 0.0-1.0 range.
+    Uses burn-specific labels when wound_type contains "burn".
     """
     seed = image_path or str(random.random())
 
@@ -364,11 +446,22 @@ def _mock_time_classification(image_path: str | None = None) -> dict[str, Any]:
     m_score = _hash_to_score(seed, "moisture")
     e_score = _hash_to_score(seed, "edge")
 
+    if _is_burn(wound_type):
+        t_labels, i_labels, m_labels, e_labels = (
+            _BURN_TISSUE_LABELS, _BURN_INFLAMMATION_LABELS,
+            _BURN_MOISTURE_LABELS, _BURN_EDGE_LABELS,
+        )
+    else:
+        t_labels, i_labels, m_labels, e_labels = (
+            _TISSUE_LABELS, _INFLAMMATION_LABELS,
+            _MOISTURE_LABELS, _EDGE_LABELS,
+        )
+
     return {
-        "tissue": {"type": _label_for_score(t_score, _TISSUE_LABELS), "score": t_score},
-        "inflammation": {"type": _label_for_score(i_score, _INFLAMMATION_LABELS), "score": i_score},
-        "moisture": {"type": _label_for_score(m_score, _MOISTURE_LABELS), "score": m_score},
-        "edge": {"type": _label_for_score(e_score, _EDGE_LABELS), "score": e_score},
+        "tissue": {"type": _label_for_score(t_score, t_labels), "score": t_score},
+        "inflammation": {"type": _label_for_score(i_score, i_labels), "score": i_score},
+        "moisture": {"type": _label_for_score(m_score, m_labels), "score": m_score},
+        "edge": {"type": _label_for_score(e_score, e_labels), "score": e_score},
     }
 
 
@@ -481,17 +574,22 @@ class MedGemmaWrapper:
 
     # ---- TIME classification ------------------------------------------------
 
-    def classify_time(self, image: Image.Image, *, image_path: str | None = None) -> dict[str, Any]:
-        """Classify wound using the TIME framework. Retries once on JSON parse failure."""
-        if self.mock:
-            # Use provided path, fall back to PIL filename, then random seed
-            seed = image_path or getattr(image, "filename", None)
-            return _mock_time_classification(image_path=seed)
+    def classify_time(
+        self, image: Image.Image, *, image_path: str | None = None, wound_type: str | None = None,
+    ) -> dict[str, Any]:
+        """Classify wound using the TIME framework. Retries once on JSON parse failure.
 
+        Uses burn-specific prompt and labels when wound_type contains "burn".
+        """
+        if self.mock:
+            seed = image_path or getattr(image, "filename", None)
+            return _mock_time_classification(image_path=seed, wound_type=wound_type)
+
+        base_prompt = BURN_CLASSIFICATION_PROMPT if _is_burn(wound_type) else TIME_CLASSIFICATION_PROMPT
         max_retries = 2
         last_error: Exception | None = None
         for attempt in range(max_retries):
-            prompt = TIME_CLASSIFICATION_PROMPT
+            prompt = base_prompt
             if attempt > 0:
                 prompt += "\nRemember: respond with valid JSON only."
             messages = [

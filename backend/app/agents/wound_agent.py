@@ -22,7 +22,7 @@ from PIL import Image
 from scipy.spatial.distance import cosine as cosine_distance
 
 from app.models.medgemma import MedGemmaWrapper
-from app.models.medsiglip import MedSigLIPWrapper, WOUND_LABELS
+from app.models.medsiglip import MedSigLIPWrapper, WOUND_LABELS, BURN_LABELS
 from app.models.medasr import MedASRWrapper
 
 logger = logging.getLogger(__name__)
@@ -129,15 +129,24 @@ class WoundAgent:
         assessment_id: str,
         image: Image.Image,
         audio_path: str | None = None,
+        wound_type: str | None = None,
     ) -> dict[str, Any]:
-        """Run the full 8-step analysis pipeline and persist results."""
+        """Run the full 8-step analysis pipeline and persist results.
 
-        logger.info("Starting analysis for assessment %s", assessment_id)
+        When wound_type contains "burn", uses burn-specific labels and prompts.
+        """
+
+        is_burn = wound_type is not None and "burn" in wound_type.lower()
+        logger.info(
+            "Starting analysis for assessment %s (wound_type=%s, burn=%s)",
+            assessment_id, wound_type, is_burn,
+        )
 
         # Step 1: MedSigLIP — embedding + zero-shot
-        logger.info("Step 1: Computing SigLIP embedding and zero-shot scores.")
+        labels = BURN_LABELS if is_burn else WOUND_LABELS
+        logger.info("Step 1: Computing SigLIP embedding and zero-shot scores (%d labels).", len(labels))
         embedding = self.medsiglip.get_embedding(image)
-        zeroshot = self.medsiglip.zero_shot_classify(image, WOUND_LABELS)
+        zeroshot = self.medsiglip.zero_shot_classify(image, labels)
 
         # Step 2: MedGemma — TIME classification (fetch assessment first for image_path)
         assessment = self.db.get_assessment(assessment_id)
@@ -145,7 +154,7 @@ class WoundAgent:
             raise ValueError(f"Assessment {assessment_id} not found.")
         logger.info("Step 2: Running TIME classification via MedGemma.")
         time_scores = self.medgemma.classify_time(
-            image, image_path=assessment.get("image_path"),
+            image, image_path=assessment.get("image_path"), wound_type=wound_type,
         )
 
         # Step 3: Retrieve previous assessment for this patient
