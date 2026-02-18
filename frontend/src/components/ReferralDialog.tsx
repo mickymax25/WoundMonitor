@@ -1,21 +1,17 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
-import { Send, AlertTriangle, User, Phone, X, Loader2 } from "lucide-react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { createReferral, getReferralSummaryUrl } from "@/lib/api";
+  Send,
+  AlertTriangle,
+  User,
+  Phone,
+  Mail,
+  MessageCircle,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Referral } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,8 +22,6 @@ type Urgency = "routine" | "urgent" | "emergency";
 interface ReferralDialogProps {
   open: boolean;
   onClose: () => void;
-  assessmentId: string;
-  patientId: string;
   patientName: string;
   alertLevel: string;
   alertDetail: string | null;
@@ -35,37 +29,21 @@ interface ReferralDialogProps {
   referringPhysicianPhone?: string | null;
   referringPhysicianEmail?: string | null;
   referringPhysicianPreferredContact?: string | null;
-  onReferralCreated: (referral: Referral) => void;
+  onReferralSent: () => void;
 }
 
 // ---------------------------------------------------------------------------
-// Urgency pill configuration
+// Helpers
 // ---------------------------------------------------------------------------
 
-const URGENCY_OPTIONS: {
-  value: Urgency;
-  label: string;
-  activeClasses: string;
-}[] = [
-  {
-    value: "routine",
-    label: "Routine",
-    activeClasses:
-      "bg-sky-500/15 text-sky-400 ring-sky-500/30",
-  },
-  {
-    value: "urgent",
-    label: "Urgent",
-    activeClasses:
-      "bg-orange-300/10 text-orange-300 ring-orange-300/25",
-  },
-  {
-    value: "emergency",
-    label: "Emergency",
-    activeClasses:
-      "bg-red-500/15 text-red-400 ring-red-500/30",
-  },
-];
+function looksLikeEmail(v: string): boolean {
+  return /[^\s@]+@[^\s@]+\.[^\s@]+/.test(v.trim());
+}
+
+function looksLikePhone(v: string): boolean {
+  const digits = v.replace(/\D/g, "");
+  return digits.length >= 6;
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -74,8 +52,6 @@ const URGENCY_OPTIONS: {
 export function ReferralDialog({
   open,
   onClose,
-  assessmentId,
-  patientId,
   patientName,
   alertLevel,
   alertDetail,
@@ -83,282 +59,264 @@ export function ReferralDialog({
   referringPhysicianPhone,
   referringPhysicianEmail,
   referringPhysicianPreferredContact,
-  onReferralCreated,
+  onReferralSent,
 }: ReferralDialogProps) {
-  // Default urgency based on alert level
   const defaultUrgency: Urgency =
     alertLevel === "red" ? "emergency" : "urgent";
 
-  // Derive the best contact from preferred method
-  const derivedContact =
-    referringPhysicianPreferredContact === "email"
-      ? referringPhysicianEmail
-      : referringPhysicianPhone;
-
   const [urgency, setUrgency] = useState<Urgency>(defaultUrgency);
   const [physicianName, setPhysicianName] = useState(referringPhysician ?? "");
-  const [physicianContact, setPhysicianContact] = useState(derivedContact ?? referringPhysicianPhone ?? referringPhysicianEmail ?? "");
+  const [contact, setContact] = useState(
+    referringPhysicianPhone ?? referringPhysicianEmail ?? ""
+  );
   const [notes, setNotes] = useState(
     alertDetail ? `Clinical alert: ${alertDetail}` : ""
   );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // Reset form state when the dialog opens with new props
   const resetForm = useCallback(() => {
     setUrgency(alertLevel === "red" ? "emergency" : "urgent");
     setPhysicianName(referringPhysician ?? "");
-    const contact =
-      referringPhysicianPreferredContact === "email"
-        ? referringPhysicianEmail
-        : referringPhysicianPhone;
-    setPhysicianContact(contact ?? referringPhysicianPhone ?? referringPhysicianEmail ?? "");
+    setContact(referringPhysicianPhone ?? referringPhysicianEmail ?? "");
     setNotes(alertDetail ? `Clinical alert: ${alertDetail}` : "");
-    setError(null);
-  }, [alertLevel, alertDetail, referringPhysician, referringPhysicianPhone, referringPhysicianEmail, referringPhysicianPreferredContact]);
+  }, [alertLevel, alertDetail, referringPhysician, referringPhysicianPhone, referringPhysicianEmail]);
 
-  const handleOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      if (!nextOpen) {
-        onClose();
-        // Delay reset so the closing animation completes
-        setTimeout(resetForm, 200);
-      }
-    },
-    [onClose, resetForm]
-  );
+  const handleClose = useCallback(() => {
+    onClose();
+    setTimeout(resetForm, 200);
+  }, [onClose, resetForm]);
 
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      setLoading(true);
-      setError(null);
+  // Derived values for message building
+  const physician = physicianName.trim() || "Physician";
+  const patient = patientName || "Patient";
+  const urgencyLabel = urgency === "emergency" ? "EMERGENCY" : urgency === "urgent" ? "Urgent" : "Routine";
+  const alertInfo = notes.trim() || "Clinical review recommended";
 
-      try {
-        const referral = await createReferral({
-          assessment_id: assessmentId,
-          patient_id: patientId,
-          urgency,
-          physician_name: physicianName.trim() || undefined,
-          physician_contact: physicianContact.trim() || undefined,
-          referral_notes: notes.trim() || undefined,
-        });
+  // Resolve phone and email from the contact field + stored values
+  const resolvedPhone = useMemo(() => {
+    if (looksLikePhone(contact)) return contact.trim();
+    if (referringPhysicianPhone) return referringPhysicianPhone;
+    return null;
+  }, [contact, referringPhysicianPhone]);
 
-        onReferralCreated(referral);
+  const resolvedEmail = useMemo(() => {
+    if (looksLikeEmail(contact)) return contact.trim();
+    if (referringPhysicianEmail) return referringPhysicianEmail;
+    return null;
+  }, [contact, referringPhysicianEmail]);
 
-        // Attempt Web Share API
-        const summaryUrl = getReferralSummaryUrl(referral.id);
-        if (typeof navigator !== "undefined" && navigator.share) {
-          try {
-            await navigator.share({
-              title: `Wound Monitor Referral -- ${patientName}`,
-              text: `${urgency.toUpperCase()} referral for ${patientName}. Please review the clinical summary.`,
-              url: summaryUrl,
-            });
-          } catch {
-            // User cancelled the share sheet or share is unavailable -- not an error
-          }
-        }
-
-        onClose();
-        setTimeout(resetForm, 200);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to create referral."
+  const handleSend = useCallback(
+    (channel: "phone" | "whatsapp" | "email") => {
+      let url = "";
+      if (channel === "phone" && resolvedPhone) {
+        const clean = resolvedPhone.replace(/[^+\d]/g, "");
+        url = `tel:${clean}`;
+      } else if (channel === "whatsapp" && resolvedPhone) {
+        const clean = resolvedPhone.replace(/[^+\d]/g, "");
+        const text = encodeURIComponent(
+          `Wound Monitor — ${urgencyLabel} Referral\n\n${physician}, I am referring ${patient} for review.\n\n${alertInfo}`
         );
-      } finally {
-        setLoading(false);
+        url = `https://wa.me/${clean}?text=${text}`;
+      } else if (channel === "email" && resolvedEmail) {
+        const subject = encodeURIComponent(`Wound Monitor — ${urgencyLabel} Referral for ${patient}`);
+        const body = encodeURIComponent(
+          `Dear ${physician},\n\nI am sending a ${urgencyLabel.toLowerCase()} referral for ${patient}.\n\n${alertInfo}\n\nPlease review at your earliest convenience.\n\nBest regards`
+        );
+        url = `mailto:${resolvedEmail}?subject=${subject}&body=${body}`;
+      }
+      if (url) {
+        window.open(url, "_blank");
+        onReferralSent();
+        handleClose();
       }
     },
-    [
-      assessmentId,
-      patientId,
-      urgency,
-      physicianName,
-      physicianContact,
-      notes,
-      patientName,
-      onReferralCreated,
-      onClose,
-      resetForm,
-    ]
+    [resolvedPhone, resolvedEmail, urgencyLabel, physician, patient, alertInfo, onReferralSent, handleClose]
   );
 
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <div className="flex items-center gap-2.5">
-            <div
-              className={cn(
-                "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ring-1",
+  const preferred = referringPhysicianPreferredContact;
+
+  if (!open) return null;
+
+  const content = (
+    <div className="fixed inset-0 z-[9999]" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0 }}>
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={handleClose}
+        style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+      />
+
+      {/* Sheet — centered */}
+      <div
+        className="w-[calc(100%-32px)] max-w-[380px] max-h-[80vh] overflow-y-auto"
+        style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
+      >
+        <div className="rounded-2xl overflow-hidden bg-[hsl(var(--card))] border-2 border-white/20 shadow-2xl shadow-black/50">
+
+          {/* Header */}
+          <div className="px-5 pt-5 pb-4 flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ring-1",
                 alertLevel === "red"
                   ? "bg-red-500/15 ring-red-500/25 text-red-400"
                   : "bg-orange-300/10 ring-orange-300/20 text-orange-300"
-              )}
-            >
-              <Send className="h-4 w-4" />
+              )}>
+                <Send className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-[15px] font-bold text-foreground">Refer to Physician</p>
+                <p className="text-[12px] text-muted-foreground mt-0.5">
+                  for <span className="text-foreground font-medium">{patientName}</span>
+                </p>
+              </div>
             </div>
-            <DialogTitle className="text-[15px]">
-              Refer to Physician
-            </DialogTitle>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="w-8 h-8 rounded-full bg-white/[0.06] flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors -mr-1 -mt-1"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <DialogDescription className="text-[13px] mt-1.5">
-            Send a clinical referral for{" "}
-            <span className="font-semibold text-foreground">
-              {patientName}
-            </span>
-            .
-          </DialogDescription>
-        </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5 mt-1">
-          {/* Urgency selector */}
-          <div className="space-y-2">
-            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Urgency
-            </Label>
+          {/* Urgency */}
+          <div className="px-5 pb-4">
             <div className="flex gap-2">
-              {URGENCY_OPTIONS.map((opt) => {
-                const isActive = urgency === opt.value;
+              {(["routine", "urgent", "emergency"] as Urgency[]).map((val) => {
+                const active = urgency === val;
+                const styles: Record<Urgency, string> = {
+                  routine: active ? "bg-sky-500/15 text-sky-400 ring-sky-500/30" : "",
+                  urgent: active ? "bg-orange-300/10 text-orange-300 ring-orange-300/25" : "",
+                  emergency: active ? "bg-red-500/15 text-red-400 ring-red-500/30" : "",
+                };
                 return (
                   <button
-                    key={opt.value}
+                    key={val}
                     type="button"
-                    onClick={() => setUrgency(opt.value)}
+                    onClick={() => setUrgency(val)}
                     className={cn(
-                      "flex-1 min-h-[44px] rounded-xl text-[13px] font-semibold ring-1 transition-all",
-                      isActive
-                        ? opt.activeClasses
-                        : "bg-transparent text-muted-foreground ring-border hover:ring-muted-foreground/30"
+                      "flex-1 h-10 rounded-xl text-[12px] font-semibold ring-1 transition-all capitalize",
+                      active
+                        ? styles[val]
+                        : "bg-transparent text-muted-foreground/60 ring-white/[0.06] hover:ring-white/[0.12]"
                     )}
                   >
-                    {opt.value === "emergency" && isActive && (
-                      <AlertTriangle className="inline h-3.5 w-3.5 mr-1.5 -mt-0.5" />
+                    {val === "emergency" && active && (
+                      <AlertTriangle className="inline h-3 w-3 mr-1 -mt-0.5" />
                     )}
-                    {opt.label}
+                    {val}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Physician name */}
-          <div className="space-y-2">
-            <Label
-              htmlFor="referral-physician-name"
-              className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold"
-            >
-              Physician Name
-              <span className="ml-1.5 normal-case tracking-normal text-[10px] text-muted-foreground/50">
-                (optional)
-              </span>
-            </Label>
+          {/* Fields */}
+          <div className="px-5 pb-4 space-y-3">
+            {/* Physician */}
             <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 pointer-events-none" />
-              <Input
-                id="referral-physician-name"
-                placeholder="Dr. ..."
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 pointer-events-none" />
+              <input
+                placeholder="Physician name"
                 value={physicianName}
                 onChange={(e) => setPhysicianName(e.target.value)}
-                className="pl-10 h-11"
+                className="w-full h-11 rounded-xl bg-white/[0.04] border border-white/[0.06] pl-10 pr-4 text-[13px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all"
               />
             </div>
-          </div>
 
-          {/* Physician contact */}
-          <div className="space-y-2">
-            <Label
-              htmlFor="referral-physician-contact"
-              className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold"
-            >
-              Contact
-              <span className="ml-1.5 normal-case tracking-normal text-[10px] text-muted-foreground/50">
-                (email or phone, optional)
-              </span>
-            </Label>
+            {/* Contact */}
             <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 pointer-events-none" />
-              <Input
-                id="referral-physician-contact"
-                placeholder="email@hospital.org or +1..."
-                value={physicianContact}
-                onChange={(e) => setPhysicianContact(e.target.value)}
-                className="pl-10 h-11"
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 pointer-events-none" />
+              <input
+                placeholder="Phone or email"
+                value={contact}
+                onChange={(e) => setContact(e.target.value)}
+                className="w-full h-11 rounded-xl bg-white/[0.04] border border-white/[0.06] pl-10 pr-4 text-[13px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all"
               />
             </div>
-          </div>
 
-          {/* Notes */}
-          <div className="space-y-2">
-            <Label
-              htmlFor="referral-notes"
-              className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold"
-            >
-              Referral Notes
-            </Label>
+            {/* Notes — compact */}
             <textarea
-              id="referral-notes"
-              rows={4}
+              rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Additional clinical context for the physician..."
-              className={cn(
-                "flex w-full rounded-md border border-input bg-background px-3 py-2.5 text-[13px] leading-relaxed",
-                "ring-offset-background placeholder:text-muted-foreground/40",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                "disabled:cursor-not-allowed disabled:opacity-50",
-                "resize-none"
-              )}
+              placeholder="Clinical context..."
+              className="w-full rounded-xl bg-white/[0.04] border border-white/[0.06] px-4 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all resize-none leading-relaxed"
             />
           </div>
 
-          {/* Error */}
-          {error && (
-            <div
-              className="flex items-center gap-2 text-[13px] text-red-400 bg-red-500/10 rounded-lg px-3 py-2.5 ring-1 ring-red-500/20"
-              role="alert"
-            >
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              {error}
-            </div>
-          )}
+          {/* Channel buttons — always visible */}
+          <div className="px-5 pb-5">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground/40 font-semibold mb-3 text-center">
+              Send via
+            </p>
+            <div className="flex gap-2">
+              {/* Call */}
+              <button
+                type="button"
+                disabled={!resolvedPhone}
+                onClick={() => handleSend("phone")}
+                className={cn(
+                  "flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl ring-1 transition-all active:scale-[0.97]",
+                  resolvedPhone
+                    ? "bg-emerald-500/10 ring-emerald-500/20 text-emerald-400"
+                    : "bg-white/[0.02] ring-white/[0.04] text-muted-foreground/20",
+                  preferred === "phone" && resolvedPhone && "ring-2 ring-emerald-500/40"
+                )}
+              >
+                <Phone className="h-5 w-5" />
+                <span className="text-[11px] font-semibold">Call</span>
+                {preferred === "phone" && resolvedPhone && (
+                  <span className="text-[8px] font-medium bg-emerald-500/15 px-1.5 py-0.5 rounded-full -mt-0.5">Preferred</span>
+                )}
+              </button>
 
-          {/* Actions */}
-          <DialogFooter className="gap-2 pt-1">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOpenChange(false)}
-              disabled={loading}
-              className="min-h-[44px]"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading}
-              className={cn(
-                "min-h-[44px] gap-2",
-                urgency === "emergency" &&
-                  "bg-red-600 hover:bg-red-600/90 text-white"
-              )}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4" />
-                  Send Referral
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              {/* WhatsApp */}
+              <button
+                type="button"
+                disabled={!resolvedPhone}
+                onClick={() => handleSend("whatsapp")}
+                className={cn(
+                  "flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl ring-1 transition-all active:scale-[0.97]",
+                  resolvedPhone
+                    ? "bg-green-500/10 ring-green-500/20 text-green-400"
+                    : "bg-white/[0.02] ring-white/[0.04] text-muted-foreground/20",
+                  preferred === "whatsapp" && resolvedPhone && "ring-2 ring-green-500/40"
+                )}
+              >
+                <MessageCircle className="h-5 w-5" />
+                <span className="text-[11px] font-semibold">WhatsApp</span>
+                {preferred === "whatsapp" && resolvedPhone && (
+                  <span className="text-[8px] font-medium bg-green-500/15 px-1.5 py-0.5 rounded-full -mt-0.5">Preferred</span>
+                )}
+              </button>
+
+              {/* Email */}
+              <button
+                type="button"
+                disabled={!resolvedEmail}
+                onClick={() => handleSend("email")}
+                className={cn(
+                  "flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl ring-1 transition-all active:scale-[0.97]",
+                  resolvedEmail
+                    ? "bg-sky-500/10 ring-sky-500/20 text-sky-400"
+                    : "bg-white/[0.02] ring-white/[0.04] text-muted-foreground/20",
+                  preferred === "email" && resolvedEmail && "ring-2 ring-sky-500/40"
+                )}
+              >
+                <Mail className="h-5 w-5" />
+                <span className="text-[11px] font-semibold">Email</span>
+                {preferred === "email" && resolvedEmail && (
+                  <span className="text-[8px] font-medium bg-sky-500/15 px-1.5 py-0.5 rounded-full -mt-0.5">Preferred</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
+
+  if (typeof document === "undefined") return content;
+  return createPortal(content, document.body);
 }

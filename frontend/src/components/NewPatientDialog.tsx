@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   Plus,
   User,
@@ -226,6 +227,65 @@ function FormSelect({
 }) {
   const [open, setOpen] = useState(false);
   const selectedLabel = options.find((o) => o.value === value)?.label;
+  const portalTarget = React.useContext(PickerPortalContext);
+
+  const pickerOverlay = open ? (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center px-6"
+      onClick={() => setOpen(false)}
+    >
+      {/* Scrim */}
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+
+      {/* Sheet */}
+      <div
+        className="relative w-full max-w-sm rounded-2xl overflow-hidden border border-white/[0.10] shadow-2xl"
+        style={{
+          background: "linear-gradient(180deg, hsl(226 30% 19%) 0%, hsl(228 32% 14%) 100%)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.08]">
+          <p className="text-[13px] text-muted-foreground">{placeholder}</p>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="text-[14px] font-semibold text-primary"
+          >
+            Done
+          </button>
+        </div>
+
+        {/* Options */}
+        <div className="max-h-[50vh] overflow-y-auto py-1">
+          {options.map((opt) => {
+            const active = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "w-full flex items-center justify-between px-4 h-[46px] text-[15px] transition-colors",
+                  "active:bg-white/[0.08]",
+                  active
+                    ? "text-primary font-medium"
+                    : "text-foreground/80"
+                )}
+              >
+                <span>{opt.label}</span>
+                {active && <Check className="h-4 w-4 text-primary shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <>
@@ -244,64 +304,10 @@ function FormSelect({
         {selectedLabel || placeholder}
       </button>
 
-      {/* Picker overlay — centered */}
-      {open && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center px-6"
-          onClick={() => setOpen(false)}
-        >
-          {/* Scrim */}
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-
-          {/* Sheet */}
-          <div
-            className="relative w-full max-w-sm rounded-2xl overflow-hidden border border-white/[0.10] shadow-2xl"
-            style={{
-              background: "linear-gradient(180deg, hsl(226 30% 19%) 0%, hsl(228 32% 14%) 100%)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.08]">
-              <p className="text-[13px] text-muted-foreground">{placeholder}</p>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="text-[14px] font-semibold text-primary"
-              >
-                Done
-              </button>
-            </div>
-
-            {/* Options */}
-            <div className="max-h-[50vh] overflow-y-auto py-1">
-              {options.map((opt) => {
-                const active = opt.value === value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => {
-                      onChange(opt.value);
-                      setOpen(false);
-                    }}
-                    className={cn(
-                      "w-full flex items-center justify-between px-4 h-[46px] text-[15px] transition-colors",
-                      "active:bg-white/[0.08]",
-                      active
-                        ? "text-primary font-medium"
-                        : "text-foreground/80"
-                    )}
-                  >
-                    <span>{opt.label}</span>
-                    {active && <Check className="h-4 w-4 text-primary shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Portal into DialogContent (outside scrollable form) to stay inside Radix focus trap */}
+      {pickerOverlay && portalTarget
+        ? createPortal(pickerOverlay, portalTarget)
+        : pickerOverlay}
     </>
   );
 }
@@ -310,10 +316,16 @@ function FormSelect({
 // Main Component
 // ---------------------------------------------------------------------------
 
+const PickerPortalContext = React.createContext<HTMLDivElement | null>(null);
+
 export function NewPatientDialog({ onCreated, trigger }: NewPatientDialogProps) {
+  const pickerPortalRef = React.useRef<HTMLDivElement>(null);
+  const [pickerPortalNode, setPickerPortalNode] = React.useState<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createdPatient, setCreatedPatient] = useState<PatientResponse | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
@@ -352,6 +364,8 @@ export function NewPatientDialog({ onCreated, trigger }: NewPatientDialogProps) 
     setReferringPhysicianEmail("");
     setReferringPhysicianPreferred("");
     setError(null);
+    setCreatedPatient(null);
+    setLinkCopied(false);
   }, []);
 
   const handleSubmit = useCallback(
@@ -381,9 +395,7 @@ export function NewPatientDialog({ onCreated, trigger }: NewPatientDialogProps) 
           referring_physician_email: referringPhysicianEmail.trim() || null,
           referring_physician_preferred_contact: referringPhysicianPreferred || null,
         });
-        onCreated(patient);
-        setOpen(false);
-        resetForm();
+        setCreatedPatient(patient);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to create patient."
@@ -392,7 +404,7 @@ export function NewPatientDialog({ onCreated, trigger }: NewPatientDialogProps) 
         setLoading(false);
       }
     },
-    [name, age, sex, phone, woundType, woundLocation, comorbidities, referringPhysician, referringPhysicianSpecialty, referringPhysicianFacility, referringPhysicianPhone, referringPhysicianEmail, referringPhysicianPreferred, onCreated, resetForm]
+    [name, age, sex, phone, woundType, woundLocation, comorbidities, referringPhysician, referringPhysicianSpecialty, referringPhysicianFacility, referringPhysicianPhone, referringPhysicianEmail, referringPhysicianPreferred]
   );
 
   return (
@@ -432,6 +444,61 @@ export function NewPatientDialog({ onCreated, trigger }: NewPatientDialogProps) 
           `,
         }}
       >
+        {/* ── Success screen with share link ── */}
+        {createdPatient ? (
+          <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/15 flex items-center justify-center mb-5 ring-1 ring-emerald-500/25">
+              <Check className="h-8 w-8 text-emerald-400" />
+            </div>
+            <h2 className="text-[17px] font-bold text-foreground mb-1">Patient created</h2>
+            <p className="text-[13px] text-muted-foreground text-center mb-8">
+              {createdPatient.name} has been added to your patient list.
+            </p>
+
+            {/* Share link card */}
+            <div className="w-full max-w-xs space-y-3">
+              <div className="rounded-2xl bg-violet-500/10 ring-1 ring-violet-500/20 p-4">
+                <p className="text-[13px] font-semibold text-violet-300 mb-1">Photo upload link</p>
+                <p className="text-[11px] text-muted-foreground mb-3">
+                  Share this link with the patient so they can send wound photos between visits.
+                </p>
+                <div className="flex items-center gap-2 bg-black/20 rounded-xl px-3 py-2.5 ring-1 ring-white/[0.06]">
+                  <p className="flex-1 text-[11px] text-foreground/70 font-mono truncate">
+                    {typeof window !== "undefined" ? window.location.origin : ""}/p/{createdPatient.patient_token}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const link = `${window.location.origin}/p/${createdPatient.patient_token}`;
+                      navigator.clipboard.writeText(link).then(() => {
+                        setLinkCopied(true);
+                        setTimeout(() => setLinkCopied(false), 2500);
+                      });
+                    }}
+                    className={cn(
+                      "shrink-0 text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors",
+                      linkCopied
+                        ? "bg-emerald-500/20 text-emerald-400"
+                        : "bg-violet-500/20 text-violet-300 active:bg-violet-500/30"
+                    )}
+                  >
+                    {linkCopied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => { if (createdPatient) onCreated(createdPatient); setOpen(false); resetForm(); }}
+                className="w-full h-12 rounded-2xl bg-primary text-white text-[14px] font-bold
+                           shadow-lg shadow-primary/25 active:scale-[0.97] transition-transform"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+        <>
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
           <button
@@ -458,6 +525,7 @@ export function NewPatientDialog({ onCreated, trigger }: NewPatientDialogProps) 
         </div>
 
         {/* ── Form ── */}
+        <PickerPortalContext.Provider value={pickerPortalNode}>
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
 
           {/* ── Widget: Patient Info (blue) ── */}
@@ -688,6 +756,11 @@ export function NewPatientDialog({ onCreated, trigger }: NewPatientDialogProps) 
             </div>
           )}
         </form>
+        </PickerPortalContext.Provider>
+        {/* Portal target for pickers — inside DialogContent but outside the scrollable form */}
+        <div ref={(node) => { (pickerPortalRef as React.MutableRefObject<HTMLDivElement | null>).current = node; setPickerPortalNode(node); }} />
+        </>
+        )}
       </DialogContent>
     </Dialog>
   );

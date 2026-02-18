@@ -29,10 +29,12 @@ export interface PatientResponse {
   referring_physician_phone: string | null;
   referring_physician_email: string | null;
   referring_physician_preferred_contact: string | null;
+  patient_token: string;
   created_at: string;
   latest_trajectory: string | null;
   latest_alert_level: string | null;
   assessment_count: number;
+  patient_reported_count: number;
 }
 
 export interface TimeScore {
@@ -47,11 +49,23 @@ export interface TimeClassification {
   edge: TimeScore;
 }
 
+export interface AssessmentImage {
+  id: string;
+  image_path: string;
+  is_primary: boolean;
+  caption: string | null;
+  created_at: string;
+}
+
 export interface AssessmentResponse {
   id: string;
   patient_id: string;
   visit_date: string;
   image_path: string;
+  source: string;
+  audio_path: string | null;
+  text_notes: string | null;
+  images: AssessmentImage[];
   time_classification: TimeClassification | null;
   zeroshot_scores: Record<string, number> | null;
   nurse_notes: string | null;

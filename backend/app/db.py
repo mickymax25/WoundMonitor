@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS patients (
     referring_physician_phone TEXT,
     referring_physician_email TEXT,
     referring_physician_preferred_contact TEXT,
+    patient_token TEXT UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -35,6 +36,7 @@ CREATE TABLE IF NOT EXISTS assessments (
     patient_id TEXT NOT NULL REFERENCES patients(id),
     visit_date TIMESTAMP NOT NULL,
     image_path TEXT NOT NULL,
+    source TEXT DEFAULT 'nurse',
     tissue_type TEXT,
     tissue_score REAL,
     inflammation TEXT,
@@ -55,6 +57,15 @@ CREATE TABLE IF NOT EXISTS assessments (
     report_text TEXT,
     alert_level TEXT,
     alert_detail TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS assessment_images (
+    id TEXT PRIMARY KEY,
+    assessment_id TEXT NOT NULL REFERENCES assessments(id),
+    image_path TEXT NOT NULL,
+    is_primary BOOLEAN DEFAULT FALSE,
+    caption TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -110,13 +121,14 @@ def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
 
 def create_patient(data: dict[str, Any]) -> dict[str, Any]:
     patient_id = str(uuid4())
+    patient_token = uuid4().hex[:12]
     comorbidities = json.dumps(data.get("comorbidities", []))
     now = datetime.now(timezone.utc).isoformat()
     conn = get_db()
     try:
         conn.execute(
-            "INSERT INTO patients (id, name, age, sex, phone, wound_type, wound_location, comorbidities, referring_physician, referring_physician_specialty, referring_physician_facility, referring_physician_phone, referring_physician_email, referring_physician_preferred_contact, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO patients (id, name, age, sex, phone, wound_type, wound_location, comorbidities, referring_physician, referring_physician_specialty, referring_physician_facility, referring_physician_phone, referring_physician_email, referring_physician_preferred_contact, patient_token, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 patient_id,
                 data["name"],
@@ -132,6 +144,7 @@ def create_patient(data: dict[str, Any]) -> dict[str, Any]:
                 data.get("referring_physician_phone"),
                 data.get("referring_physician_email"),
                 data.get("referring_physician_preferred_contact"),
+                patient_token,
                 now,
             ),
         )
@@ -145,6 +158,18 @@ def get_patient(patient_id: str) -> dict[str, Any] | None:
     conn = get_db()
     try:
         row = conn.execute("SELECT * FROM patients WHERE id = ?", (patient_id,)).fetchone()
+        result = _row_to_dict(row)
+        if result is not None:
+            result["comorbidities"] = json.loads(result.get("comorbidities") or "[]")
+        return result
+    finally:
+        conn.close()
+
+
+def get_patient_by_token(token: str) -> dict[str, Any] | None:
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM patients WHERE patient_token = ?", (token,)).fetchone()
         result = _row_to_dict(row)
         if result is not None:
             result["comorbidities"] = json.loads(result.get("comorbidities") or "[]")
@@ -175,16 +200,18 @@ def create_assessment(data: dict[str, Any]) -> dict[str, Any]:
     assessment_id = str(uuid4())
     now = datetime.now(timezone.utc).isoformat()
     visit_date = data.get("visit_date") or now
+    source = data.get("source", "nurse")
     conn = get_db()
     try:
         conn.execute(
-            "INSERT INTO assessments (id, patient_id, visit_date, image_path, audio_path, text_notes, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO assessments (id, patient_id, visit_date, image_path, source, audio_path, text_notes, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 assessment_id,
                 data["patient_id"],
                 visit_date,
                 data["image_path"],
+                source,
                 data.get("audio_path"),
                 data.get("text_notes"),
                 now,
@@ -283,6 +310,106 @@ def get_latest_assessment(
         return _row_to_dict(row)
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Assessment Images
+# ---------------------------------------------------------------------------
+
+def migrate_patient_tokens() -> None:
+    """Add patient_token and source columns if missing, backfill tokens."""
+    conn = get_db()
+    try:
+        # Check if patient_token column exists
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(patients)").fetchall()]
+        if "patient_token" not in cols:
+            conn.execute("ALTER TABLE patients ADD COLUMN patient_token TEXT UNIQUE")
+        # Backfill tokens for existing patients
+        rows = conn.execute("SELECT id FROM patients WHERE patient_token IS NULL").fetchall()
+        for row in rows:
+            conn.execute(
+                "UPDATE patients SET patient_token = ? WHERE id = ?",
+                (uuid4().hex[:12], row["id"]),
+            )
+        # Check if source column exists on assessments
+        acols = [row[1] for row in conn.execute("PRAGMA table_info(assessments)").fetchall()]
+        if "source" not in acols:
+            conn.execute("ALTER TABLE assessments ADD COLUMN source TEXT DEFAULT 'nurse'")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def count_patient_reported(patient_id: str) -> int:
+    """Count patient-reported assessments that have not been analyzed yet."""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM assessments WHERE patient_id = ? AND source = 'patient' AND tissue_type IS NULL",
+            (patient_id,),
+        ).fetchone()
+        return row[0] if row else 0
+    finally:
+        conn.close()
+
+
+def migrate_assessment_images() -> None:
+    """Migrate existing image_path from assessments into assessment_images table."""
+    conn = get_db()
+    try:
+        count = conn.execute("SELECT COUNT(*) FROM assessment_images").fetchone()[0]
+        if count > 0:
+            return  # Already migrated
+        rows = conn.execute(
+            "SELECT id, image_path, created_at FROM assessments WHERE image_path IS NOT NULL"
+        ).fetchall()
+        for row in rows:
+            img_id = str(uuid4())
+            conn.execute(
+                "INSERT INTO assessment_images (id, assessment_id, image_path, is_primary, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (img_id, row["id"], row["image_path"], True, row["created_at"]),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_assessment_images(assessment_id: str) -> list[dict[str, Any]]:
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM assessment_images WHERE assessment_id = ? ORDER BY is_primary DESC, created_at ASC",
+            (assessment_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def add_assessment_image(
+    assessment_id: str,
+    image_path: str,
+    is_primary: bool = False,
+    caption: str | None = None,
+) -> dict[str, Any]:
+    img_id = str(uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO assessment_images (id, assessment_id, image_path, is_primary, caption, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (img_id, assessment_id, image_path, is_primary, caption, now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {
+        "id": img_id, "assessment_id": assessment_id,
+        "image_path": image_path, "is_primary": is_primary,
+        "caption": caption, "created_at": now,
+    }
 
 
 # ---------------------------------------------------------------------------

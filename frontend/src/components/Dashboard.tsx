@@ -17,9 +17,13 @@ import {
   Plus,
   AlertTriangle,
   Shield,
+  ShieldAlert,
   Zap,
   Clock,
   Settings2,
+  Bot,
+  Link2,
+  ImagePlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +32,7 @@ import { AssessmentPanel } from "@/components/AssessmentPanel";
 import { TimelineChart } from "@/components/TimelineChart";
 import { ReportPanel } from "@/components/ReportPanel";
 import { AssessmentHistory } from "@/components/AssessmentHistory";
+import { PhotoTimeline } from "@/components/PhotoTimeline";
 import { PatientList } from "@/components/PatientList";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { listPatients, listPatientAssessments } from "@/lib/api";
@@ -182,10 +187,10 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
 
   const handlePatientCreated = useCallback((patient: PatientResponse) => {
     setPatients((prev) => [patient, ...prev]);
-    setSelectedPatient(patient);
+    setSelectedPatient(null);
     setAnalysisResult(null);
     setShowAssessForm(false);
-    setActiveTab("reports");
+    setActiveTab("patients");
   }, []);
 
   const handleStartAssessment = useCallback(
@@ -255,6 +260,66 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
     []
   );
 
+  // Avatar gradient on dark surface (shared by patient cards + header)
+  function avatarGradient(patient: PatientResponse, urgent?: boolean): string {
+    if (urgent && patient.latest_alert_level === "red")
+      return "bg-gradient-to-br from-rose-500/20 to-rose-600/10 text-rose-400 ring-1 ring-rose-500/20";
+    if (urgent)
+      return "bg-gradient-to-br from-orange-300/20 to-orange-600/10 text-orange-300 ring-1 ring-orange-300/20";
+    if (patient.latest_trajectory === "improving")
+      return "bg-gradient-to-br from-emerald-500/20 to-teal-600/10 text-emerald-400 ring-1 ring-emerald-500/20";
+    if (patient.latest_trajectory === "stable")
+      return "bg-gradient-to-br from-blue-500/15 to-indigo-600/10 text-blue-400 ring-1 ring-blue-500/15";
+    return "bg-gradient-to-br from-slate-500/15 to-slate-600/10 text-slate-400 ring-1 ring-slate-500/15";
+  }
+
+  // ---------------------------------------------------------------------------
+  // Share Patient Link (for patient self-reporting)
+  // ---------------------------------------------------------------------------
+
+  function SharePatientLink({ patient }: { patient: PatientResponse }) {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = useCallback(() => {
+      const link = `${window.location.origin}/p/${patient.patient_token}`;
+      navigator.clipboard.writeText(link).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    }, [patient.patient_token]);
+
+    if (!patient.patient_token) return null;
+
+    return (
+      <button
+        type="button"
+        onClick={handleCopy}
+        className={cn(
+          "w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all active:scale-[0.98]",
+          copied
+            ? "bg-emerald-500/15 ring-1 ring-emerald-500/25"
+            : "bg-violet-500/10 ring-1 ring-violet-500/20 hover:bg-violet-500/15"
+        )}
+      >
+        <div className={cn(
+          "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
+          copied ? "bg-emerald-500/20" : "bg-violet-500/20"
+        )}>
+          <Link2 className={cn("h-4 w-4", copied ? "text-emerald-400" : "text-violet-400")} />
+        </div>
+        <div className="flex-1 text-left min-w-0">
+          <p className={cn("text-[13px] font-semibold", copied ? "text-emerald-400" : "text-violet-300")}>
+            {copied ? "Link copied!" : "Share photo upload link"}
+          </p>
+          <p className="text-[11px] text-muted-foreground truncate">
+            {copied ? "Send it to the patient via SMS or WhatsApp" : "Patient can send wound photos between visits"}
+          </p>
+        </div>
+        <ChevronRight className={cn("h-4 w-4 shrink-0", copied ? "text-emerald-400/50" : "text-violet-400/50")} />
+      </button>
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Mobile: Patients Tab
   // ---------------------------------------------------------------------------
@@ -297,27 +362,20 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
     const totalNeedingAttention = patients.filter(needsAttention).length;
     const totalAssessments = patients.reduce((s, p) => s + p.assessment_count, 0);
 
-    const hour = new Date().getHours();
-    const greeting =
-      hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+    let userName = "";
+    try {
+      const raw = localStorage.getItem("wm_auth");
+      if (raw) {
+        const auth = JSON.parse(raw);
+        userName = (auth.name || "").split(",")[0].split(" ")[0];
+      }
+    } catch { /* ignore */ }
+    const greeting = userName ? `Hello ${userName}` : "Hello";
     const dateStr = new Date().toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",
       day: "numeric",
     });
-
-    // Avatar gradient on dark surface
-    function avatarGradient(patient: PatientResponse, urgent?: boolean): string {
-      if (urgent && patient.latest_alert_level === "red")
-        return "bg-gradient-to-br from-rose-500/20 to-rose-600/10 text-rose-400 ring-1 ring-rose-500/20";
-      if (urgent)
-        return "bg-gradient-to-br from-orange-300/20 to-orange-600/10 text-orange-300 ring-1 ring-orange-300/20";
-      if (patient.latest_trajectory === "improving")
-        return "bg-gradient-to-br from-emerald-500/20 to-teal-600/10 text-emerald-400 ring-1 ring-emerald-500/20";
-      if (patient.latest_trajectory === "stable")
-        return "bg-gradient-to-br from-blue-500/15 to-indigo-600/10 text-blue-400 ring-1 ring-blue-500/15";
-      return "bg-gradient-to-br from-slate-500/15 to-slate-600/10 text-slate-400 ring-1 ring-slate-500/15";
-    }
 
     // Alert accent line color
     function accentColor(level: string | null): string {
@@ -399,6 +457,12 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
                   {patient.comorbidities.length > 0 && (
                     <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full ring-1 ring-violet-500/15">
                       {patient.comorbidities.length} comorb.
+                    </span>
+                  )}
+                  {patient.patient_reported_count > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full ring-1 ring-blue-500/15 animate-pulse">
+                      <ImagePlus className="h-2.5 w-2.5" />
+                      {patient.patient_reported_count} new
                     </span>
                   )}
                   <span className="text-[10px] text-muted-foreground/40 ml-auto tabular-nums">
@@ -648,40 +712,154 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
   // ---------------------------------------------------------------------------
 
   function MobilePatientHeader() {
+    const [showShareLink, setShowShareLink] = useState(false);
+    const [linkCopied, setLinkCopied] = useState(false);
+
     if (!selectedPatient) return null;
 
+    const isUrgent = selectedPatient.latest_alert_level === "red" || selectedPatient.latest_alert_level === "orange";
+    const alertColor = (() => {
+      switch (selectedPatient.latest_alert_level) {
+        case "red": return "bg-rose-500";
+        case "orange": return "bg-orange-400";
+        case "yellow": return "bg-amber-400";
+        case "green": return "bg-emerald-500";
+        default: return "bg-slate-500";
+      }
+    })();
+
+    const meta: string[] = [];
+    if (selectedPatient.age) meta.push(`${selectedPatient.age}y`);
+    if (selectedPatient.assessment_count > 0) meta.push(`${selectedPatient.assessment_count} visit${selectedPatient.assessment_count > 1 ? "s" : ""}`);
+
+    const patientLink = typeof window !== "undefined"
+      ? `${window.location.origin}/p/${selectedPatient.patient_token}`
+      : "";
+
     return (
-      <div className="shrink-0 bg-[var(--surface-1)] border-b border-border/50 px-4 py-3">
-        <div className="flex items-center gap-3">
+      <>
+      <div className="shrink-0 px-4 pt-3 pb-1">
+        <div className="apple-card flex items-center gap-3 px-3.5 py-3">
+          {/* Avatar */}
           <div className="relative shrink-0">
-            <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center text-[11px] font-bold text-primary ring-1 ring-primary/20">
+            <div
+              className={cn(
+                "w-11 h-11 rounded-[14px] flex items-center justify-center text-[13px] font-bold tracking-wide",
+                avatarGradient(selectedPatient, isUrgent)
+              )}
+            >
               {getInitials(selectedPatient.name)}
             </div>
             <span
               className={cn(
-                "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--surface-1)]",
-                alertDotColor(selectedPatient.latest_alert_level)
+                "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--bg-base)]",
+                alertColor
               )}
             />
           </div>
+
+          {/* Name + wound + meta */}
           <div className="flex-1 min-w-0">
             <p className="text-[14px] font-semibold text-foreground truncate leading-tight">
               {selectedPatient.name}
             </p>
-            <p className="text-[11px] text-muted-foreground truncate">
+            <p className="text-[11px] text-muted-foreground truncate mt-[2px]">
               {woundLabel(selectedPatient.wound_type, selectedPatient.wound_location)}
+              {meta.length > 0 && <span className="text-muted-foreground/40"> · {meta.join(" · ")}</span>}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setActiveTab("patients")}
-            className="text-primary text-[13px] font-medium px-3 py-1.5 -mr-2 min-h-[44px] flex items-center
-                       bg-primary/10 rounded-lg ring-1 ring-primary/15 active:bg-primary/20 transition-colors"
-          >
-            Change
-          </button>
+
+          {/* Actions */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => { setShowShareLink(true); setLinkCopied(false); }}
+              className="h-8 w-8 flex items-center justify-center rounded-lg
+                         text-violet-400 text-[11px]
+                         bg-violet-500/10 ring-1 ring-violet-500/15 active:bg-violet-500/20 transition-colors"
+              title="Patient upload link"
+            >
+              <Link2 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAssessForm(true)}
+              className="h-8 px-3 flex items-center gap-1.5 rounded-lg
+                         text-primary text-[11px] font-semibold
+                         bg-primary/10 ring-1 ring-primary/15 active:bg-primary/20 transition-colors"
+            >
+              <Stethoscope className="h-3 w-3" />
+              Assess
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("patients")}
+              className="h-8 px-2.5 flex items-center rounded-lg
+                         text-muted-foreground text-[11px] font-medium
+                         bg-white/[0.04] ring-1 ring-white/[0.06] active:bg-white/[0.08] transition-colors"
+            >
+              Change
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Share link overlay */}
+      {showShareLink && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-6"
+          onClick={() => setShowShareLink(false)}
+        >
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div
+            className="relative w-full max-w-sm rounded-2xl border border-white/[0.08] p-5 shadow-2xl space-y-4"
+            style={{
+              background: "linear-gradient(180deg, hsl(226 30% 19%) 0%, hsl(228 32% 14%) 100%)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <p className="text-[14px] font-semibold text-violet-300 mb-1">Photo upload link</p>
+              <p className="text-[12px] text-muted-foreground leading-relaxed">
+                Share this link with <span className="text-foreground font-medium">{selectedPatient.name}</span> so they can send wound photos between visits.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 bg-black/25 rounded-xl px-3 py-2.5 ring-1 ring-white/[0.06]">
+              <p className="flex-1 text-[11px] text-foreground/70 font-mono truncate">
+                {patientLink}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(patientLink).then(() => {
+                    setLinkCopied(true);
+                    setTimeout(() => setLinkCopied(false), 2500);
+                  });
+                }}
+                className={cn(
+                  "shrink-0 text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors",
+                  linkCopied
+                    ? "bg-emerald-500/20 text-emerald-400"
+                    : "bg-violet-500/20 text-violet-300 active:bg-violet-500/30"
+                )}
+              >
+                {linkCopied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowShareLink(false)}
+              className="w-full h-11 rounded-xl bg-white/[0.06] ring-1 ring-white/[0.08] text-foreground text-[13px] font-semibold
+                         active:bg-white/[0.10] transition-colors"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+      </>
     );
   }
 
@@ -724,7 +902,7 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
         {selectedPatient ? (
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
             {/* Assessment form — collapsible section above the dashboard */}
-            {showAssessForm ? (
+            {showAssessForm && (
               <div className="apple-card overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30">
                   <div className="flex items-center gap-2">
@@ -746,17 +924,6 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
                   />
                 </div>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowAssessForm(true)}
-                className="w-full flex items-center justify-center gap-2.5 h-12 rounded-2xl
-                           bg-primary/15 text-primary text-[14px] font-semibold
-                           ring-1 ring-primary/20 active:bg-primary/25 transition-colors"
-              >
-                <Stethoscope className="h-4 w-4" />
-                New Assessment
-              </button>
             )}
 
             {/* Dashboard content — always visible when results exist */}
@@ -771,6 +938,13 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
                   referringPhysicianPhone={selectedPatient.referring_physician_phone}
                   referringPhysicianEmail={selectedPatient.referring_physician_email}
                   referringPhysicianPreferredContact={selectedPatient.referring_physician_preferred_contact}
+                  renderBeforeSummary={
+                    <PhotoTimeline
+                      patientId={selectedPatient.id}
+                      refreshKey={trajectoryRefresh}
+                      onSelectAssessment={handleSelectHistoryAssessment}
+                    />
+                  }
                 />
                 <AssessmentHistory
                   patientId={selectedPatient.id}
@@ -778,6 +952,14 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
                   onSelectAssessment={handleSelectHistoryAssessment}
                   refreshKey={trajectoryRefresh}
                 />
+
+                {/* AI Disclaimer */}
+                <div className="flex items-start gap-2.5 px-2 py-3">
+                  <Bot className="h-4 w-4 text-muted-foreground/40 mt-0.5 shrink-0" />
+                  <p className="text-xs text-muted-foreground/50 leading-relaxed">
+                    AI-generated report — Wound Monitor (MedGemma + MedSigLIP + MedASR). For clinical decision support only. Does not constitute a diagnosis.
+                  </p>
+                </div>
               </>
             )}
 
@@ -978,6 +1160,11 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
               <TimelineChart
                 patientId={selectedPatient.id}
                 refreshKey={trajectoryRefresh}
+              />
+              <PhotoTimeline
+                patientId={selectedPatient.id}
+                refreshKey={trajectoryRefresh}
+                onSelectAssessment={handleSelectHistoryAssessment}
               />
               {analysisResult && (
                 <AssessmentHistory

@@ -195,7 +195,9 @@ class WoundAgent:
         contradiction: dict[str, Any] = {"contradiction": False, "detail": None}
         if nurse_notes and trajectory != "baseline":
             logger.info("Step 6: Checking for contradictions.")
-            contradiction = self.medgemma.detect_contradiction(trajectory, nurse_notes)
+            contradiction = self.medgemma.detect_contradiction(
+                trajectory, nurse_notes, image=image,
+            )
         else:
             logger.info("Step 6: Skipping contradiction detection.")
 

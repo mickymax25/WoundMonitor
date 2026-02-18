@@ -174,7 +174,7 @@ function InlineAudioRecorder({
         "flex items-center gap-2 h-10 px-3.5 rounded-xl text-[12px] font-semibold transition-colors",
         hasRecording
           ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20"
-          : "bg-[var(--surface-3)] text-muted-foreground ring-1 ring-border/50 active:bg-[var(--surface-2)]",
+          : "bg-white/[0.06] text-foreground/70 ring-1 ring-white/[0.12] active:bg-white/[0.10]",
         "disabled:opacity-30"
       )}
     >
@@ -192,8 +192,8 @@ export function AssessmentPanel({
   patient,
   onAnalysisComplete,
 }: AssessmentPanelProps) {
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [textNotes, setTextNotes] = useState<string>("");
   const [step, setStep] = useState<AnalysisStep>("idle");
@@ -203,17 +203,18 @@ export function AssessmentPanel({
 
   const handleImageSelect = useCallback(async (file: File) => {
     const compressed = await compressImage(file);
-    setImageFile(compressed);
-    const url = URL.createObjectURL(compressed);
-    setImagePreview(url);
+    setImageFiles((prev) => [...prev, compressed]);
+    setImagePreviews((prev) => [...prev, URL.createObjectURL(compressed)]);
     setStep("idle");
     setErrorMsg(null);
   }, []);
 
   const handleFileInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) handleImageSelect(file);
+      const files = e.target.files;
+      if (files) {
+        Array.from(files).forEach((f) => handleImageSelect(f));
+      }
     },
     [handleImageSelect]
   );
@@ -232,12 +233,12 @@ export function AssessmentPanel({
   }, []);
 
   const clearImage = useCallback(() => {
-    setImageFile(null);
-    if (imagePreview) URL.revokeObjectURL(imagePreview);
-    setImagePreview(null);
+    imagePreviews.forEach((url) => URL.revokeObjectURL(url));
+    setImageFiles([]);
+    setImagePreviews([]);
     setStep("idle");
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }, [imagePreview]);
+  }, [imagePreviews]);
 
   const handleCameraCapture = useCallback(
     (file: File) => {
@@ -248,7 +249,7 @@ export function AssessmentPanel({
   );
 
   const handleAnalyze = useCallback(async () => {
-    if (!imageFile) return;
+    if (imageFiles.length === 0) return;
 
     setStep("uploading");
     setErrorMsg(null);
@@ -260,7 +261,8 @@ export function AssessmentPanel({
 
       const assessment = await createAssessment(
         patient.id,
-        imageFile,
+        imageFiles[0],
+        imageFiles.length > 1 ? imageFiles.slice(1) : undefined,
         audioFile,
         undefined,
         textNotes.trim() || undefined
@@ -275,7 +277,7 @@ export function AssessmentPanel({
       setStep("error");
       setErrorMsg(err instanceof Error ? err.message : "Analysis failed.");
     }
-  }, [imageFile, audioBlob, textNotes, patient.id, onAnalysisComplete]);
+  }, [imageFiles, audioBlob, textNotes, patient.id, onAnalysisComplete]);
 
   const isProcessing = step === "uploading" || step === "analyzing";
 
@@ -292,7 +294,7 @@ export function AssessmentPanel({
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        capture="environment"
+        multiple
         onChange={handleFileInput}
         className="hidden"
         aria-label="Upload wound photograph"
@@ -300,13 +302,37 @@ export function AssessmentPanel({
 
       <div className="space-y-3 p-4">
         {/* ── Photo area ── */}
-        {imagePreview ? (
+        {imagePreviews.length > 0 ? (
           <div className="relative rounded-2xl overflow-hidden ring-1 ring-border/30">
             <img
-              src={imagePreview}
-              alt="Wound photograph"
+              src={imagePreviews[0]}
+              alt="Primary wound photograph"
               className="w-full max-h-64 object-contain bg-black/20"
             />
+            {/* Additional images strip */}
+            {imagePreviews.length > 1 && (
+              <div className="flex gap-1.5 p-2 bg-black/20 overflow-x-auto">
+                {imagePreviews.map((preview, idx) => (
+                  <img
+                    key={idx}
+                    src={preview}
+                    alt={`Photo ${idx + 1}`}
+                    className={cn(
+                      "w-12 h-12 rounded-lg object-cover ring-1 shrink-0",
+                      idx === 0 ? "ring-primary/50" : "ring-border/30"
+                    )}
+                  />
+                ))}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isProcessing}
+                  className="w-12 h-12 rounded-lg bg-white/5 ring-1 ring-border/30 flex items-center justify-center shrink-0 active:bg-white/10 disabled:opacity-30"
+                >
+                  <Upload className="h-4 w-4 text-muted-foreground/50" />
+                </button>
+              </div>
+            )}
             {/* Processing overlay */}
             {isProcessing && (
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
@@ -339,50 +365,50 @@ export function AssessmentPanel({
           <div
             onDrop={handleDrop}
             onDragOver={handleDragOver}
-            className="rounded-2xl border-2 border-dashed border-border/40
-                       bg-[var(--surface-2)]/50
+            className="rounded-2xl border-2 border-dashed border-primary/30
+                       bg-primary/[0.04]
                        transition-colors duration-200
-                       hover:border-primary/30 hover:bg-primary/5"
+                       hover:border-primary/50 hover:bg-primary/[0.08]"
           >
             {/* Tap zone */}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="w-full py-8 flex flex-col items-center gap-2"
+              className="w-full py-8 flex flex-col items-center gap-3"
             >
-              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center ring-1 ring-primary/15">
-                <ImageIcon className="h-5 w-5 text-primary/60" />
+              <div className="w-14 h-14 rounded-2xl bg-primary/15 flex items-center justify-center ring-1 ring-primary/25 shadow-lg shadow-primary/10">
+                <ImageIcon className="h-6 w-6 text-primary" />
               </div>
-              <p className="text-[13px] text-foreground/80 font-medium">
+              <p className="text-[13px] text-foreground font-medium">
                 <span className="hidden md:inline">Drop wound photo or click to browse</span>
                 <span className="md:hidden">Tap to select wound photo</span>
               </p>
             </button>
             {/* Camera / Upload split buttons */}
-            <div className="flex border-t border-border/30">
+            <div className="flex border-t border-primary/15">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isProcessing}
-                className="flex-1 flex items-center justify-center gap-2 py-3
-                           text-[12px] font-semibold text-primary/70
-                           active:bg-primary/5 transition-colors
-                           border-r border-border/30
+                className="flex-1 flex items-center justify-center gap-2 py-3.5
+                           text-[13px] font-semibold text-primary
+                           active:bg-primary/10 transition-colors
+                           border-r border-primary/15
                            disabled:opacity-30"
               >
-                <Upload className="h-3.5 w-3.5" />
+                <Upload className="h-4 w-4" />
                 Gallery
               </button>
               <button
                 type="button"
                 onClick={() => setShowCamera(true)}
                 disabled={isProcessing}
-                className="flex-1 flex items-center justify-center gap-2 py-3
-                           text-[12px] font-semibold text-primary/70
-                           active:bg-primary/5 transition-colors
+                className="flex-1 flex items-center justify-center gap-2 py-3.5
+                           text-[13px] font-semibold text-primary
+                           active:bg-primary/10 transition-colors
                            disabled:opacity-30"
               >
-                <Camera className="h-3.5 w-3.5" />
+                <Camera className="h-4 w-4" />
                 Camera
               </button>
             </div>
@@ -407,9 +433,9 @@ export function AssessmentPanel({
             disabled={isProcessing}
             placeholder="Clinical notes (optional)..."
             rows={2}
-            className="w-full rounded-xl bg-[var(--surface-2)] ring-1 ring-border/40 px-3.5 py-2.5
-                       text-[13px] text-foreground placeholder:text-muted-foreground/35
-                       focus:outline-none focus:ring-2 focus:ring-primary/40
+            className="w-full rounded-xl bg-white/[0.04] ring-1 ring-white/[0.10] px-3.5 py-2.5
+                       text-[13px] text-foreground placeholder:text-muted-foreground/50
+                       focus:outline-none focus:ring-2 focus:ring-primary/40 focus:bg-white/[0.06]
                        disabled:opacity-30 resize-none leading-relaxed"
           />
         </div>
@@ -418,13 +444,13 @@ export function AssessmentPanel({
         <button
           type="button"
           onClick={handleAnalyze}
-          disabled={!imageFile || isProcessing}
+          disabled={imageFiles.length === 0 || isProcessing}
           className={cn(
             "w-full flex items-center justify-center gap-2 h-12 rounded-2xl",
             "text-[14px] font-bold transition-all active:scale-[0.97]",
-            imageFile && !isProcessing
+            imageFiles.length > 0 && !isProcessing
               ? "bg-primary text-white shadow-lg shadow-primary/25"
-              : "bg-muted text-muted-foreground/40"
+              : "bg-white/[0.06] text-foreground/30 ring-1 ring-white/[0.08]"
           )}
         >
           {step === "uploading" && (

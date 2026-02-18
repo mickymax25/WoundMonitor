@@ -68,6 +68,7 @@ export async function getPatient(
 export async function createAssessment(
   patientId: string,
   image: File,
+  additionalImages?: File[],
   audio?: File,
   visitDate?: string,
   textNotes?: string
@@ -75,6 +76,11 @@ export async function createAssessment(
   const formData = new FormData();
   formData.append("patient_id", patientId);
   formData.append("image", image);
+  if (additionalImages) {
+    for (const img of additionalImages) {
+      formData.append("additional_images", img);
+    }
+  }
   if (audio) {
     formData.append("audio", audio);
   }
@@ -89,6 +95,20 @@ export async function createAssessment(
     method: "POST",
     body: formData,
   });
+}
+
+export async function addAssessmentImages(
+  assessmentId: string,
+  images: File[]
+): Promise<AssessmentResponse> {
+  const formData = new FormData();
+  for (const img of images) {
+    formData.append("images", img);
+  }
+  return request<AssessmentResponse>(
+    `/api/v1/assessments/${assessmentId}/images`,
+    { method: "POST", body: formData }
+  );
 }
 
 export async function analyzeAssessment(
@@ -139,6 +159,32 @@ export async function createReferral(data: {
 
 export function getReferralSummaryUrl(referralId: string): string {
   return `${API_BASE}/api/v1/referrals/${referralId}/summary`;
+}
+
+// ---------------------------------------------------------------------------
+// Patient self-reporting
+// ---------------------------------------------------------------------------
+
+export async function getPatientReportInfo(
+  token: string
+): Promise<{ patient_name: string; wound_type: string | null; wound_location: string | null }> {
+  return request(`/api/v1/patient-report/${token}/info`);
+}
+
+export async function submitPatientReport(
+  token: string,
+  image: File,
+  note?: string
+): Promise<{ assessment_id: string; message: string }> {
+  const formData = new FormData();
+  formData.append("image", image);
+  if (note) {
+    formData.append("note", note);
+  }
+  return request(`/api/v1/patient-report/${token}`, {
+    method: "POST",
+    body: formData,
+  });
 }
 
 export { ApiError };

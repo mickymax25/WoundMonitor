@@ -22,7 +22,7 @@ import {
 import { TimeScoreCard } from "@/components/TimeScoreCard";
 import { ReferralDialog } from "@/components/ReferralDialog";
 import { cn, formatDate } from "@/lib/utils";
-import type { AnalysisResult, TimeClassification, Referral } from "@/lib/types";
+import type { AnalysisResult, TimeClassification } from "@/lib/types";
 
 interface ReportPanelProps {
   result: AnalysisResult | null;
@@ -33,6 +33,7 @@ interface ReportPanelProps {
   referringPhysicianPhone?: string | null;
   referringPhysicianEmail?: string | null;
   referringPhysicianPreferredContact?: string | null;
+  renderBeforeSummary?: React.ReactNode;
 }
 
 function woundTypeLabel(type: string | null | undefined): string {
@@ -461,10 +462,15 @@ export function ReportPanel({
   referringPhysicianPhone,
   referringPhysicianEmail,
   referringPhysicianPreferredContact,
+  renderBeforeSummary,
 }: ReportPanelProps) {
   const [fullReportOpen, setFullReportOpen] = useState(false);
   const [referralOpen, setReferralOpen] = useState(false);
   const [referralSent, setReferralSent] = useState(false);
+
+  const handleReferral = () => {
+    setReferralOpen(true);
+  };
 
   const parsed = useMemo<ParsedReport | null>(() => {
     if (!result) return null;
@@ -551,12 +557,10 @@ export function ReportPanel({
       </div>
 
       {/* Referral Dialog */}
-      {result.alert_level !== "green" && patientId && (
+      {result.alert_level !== "green" && (
         <ReferralDialog
           open={referralOpen}
           onClose={() => setReferralOpen(false)}
-          assessmentId={result.assessment_id}
-          patientId={patientId}
           patientName={patientName ?? "Patient"}
           alertLevel={result.alert_level}
           alertDetail={result.alert_detail}
@@ -564,9 +568,7 @@ export function ReportPanel({
           referringPhysicianPhone={referringPhysicianPhone}
           referringPhysicianEmail={referringPhysicianEmail}
           referringPhysicianPreferredContact={referringPhysicianPreferredContact}
-          onReferralCreated={() => {
-            setReferralSent(true);
-          }}
+          onReferralSent={() => setReferralSent(true)}
         />
       )}
 
@@ -648,7 +650,7 @@ export function ReportPanel({
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setReferralOpen(true)}
+                      onClick={handleReferral}
                       className={cn(
                         "w-full flex items-center justify-center gap-2 h-10 rounded-xl",
                         "text-[12px] font-semibold transition-colors active:opacity-80 ring-1",
@@ -687,28 +689,10 @@ export function ReportPanel({
         ))}
       </div>
 
-      {/* Clinical Summary */}
-      {parsed && parsed.observations.length > 0 && (
-        <CollapsibleSection
-          title="Clinical Summary"
-          icon={<Stethoscope className="h-4 w-4" />}
-          defaultOpen
-        >
-          <ul className="space-y-3 pt-3">
-            {parsed.observations.map((obs, i) => (
-              <li key={i} className="flex items-start gap-2.5">
-                <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary/60 shrink-0" />
-                <p className="text-sm text-foreground/80 leading-relaxed">
-                  <strong className="font-semibold text-foreground">
-                    {obs.label}:
-                  </strong>{" "}
-                  {obs.text}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </CollapsibleSection>
-      )}
+      {/* Slot: content injected before Clinical Summary */}
+      {renderBeforeSummary}
+
+      {/* Clinical Summary removed — redundant with TIME scores + patient header */}
 
       {/* Recommendations */}
       {parsed && parsed.recommendations.length > 0 && (
@@ -717,18 +701,37 @@ export function ReportPanel({
           icon={<ClipboardCheck className="h-4 w-4" />}
           defaultOpen
         >
-          <ul className="space-y-2.5 pt-3">
-            {parsed.recommendations.map((rec, i) => (
-              <li key={i} className="flex items-start gap-3 min-h-[44px]">
-                <div className="mt-0.5 h-5 w-5 rounded border border-primary/30 bg-primary/5 flex items-center justify-center shrink-0">
-                  <CheckCircle className="h-3 w-3 text-primary/50" />
+          <div className="space-y-2 pt-3">
+            {parsed.recommendations.map((rec, i) => {
+              const accents = [
+                { gradient: "from-blue-500/12 to-indigo-500/6", ring: "ring-blue-500/15", num: "text-blue-400", numBg: "bg-blue-500/20" },
+                { gradient: "from-violet-500/12 to-purple-500/6", ring: "ring-violet-500/15", num: "text-violet-400", numBg: "bg-violet-500/20" },
+                { gradient: "from-cyan-500/12 to-sky-500/6", ring: "ring-cyan-500/15", num: "text-cyan-400", numBg: "bg-cyan-500/20" },
+                { gradient: "from-emerald-500/12 to-teal-500/6", ring: "ring-emerald-500/15", num: "text-emerald-400", numBg: "bg-emerald-500/20" },
+                { gradient: "from-sky-500/12 to-blue-500/6", ring: "ring-sky-500/15", num: "text-sky-400", numBg: "bg-sky-500/20" },
+              ];
+              const a = accents[i % accents.length];
+              return (
+                <div
+                  key={i}
+                  className={cn(
+                    "flex items-start gap-3 p-3 rounded-xl ring-1 bg-gradient-to-r",
+                    a.gradient, a.ring
+                  )}
+                >
+                  <span className={cn(
+                    "mt-0.5 w-5 h-5 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0",
+                    a.numBg, a.num
+                  )}>
+                    {i + 1}
+                  </span>
+                  <p className="text-[13px] text-foreground/80 leading-relaxed">
+                    {rec}
+                  </p>
                 </div>
-                <p className="text-sm text-foreground/80 leading-relaxed pt-0.5">
-                  {rec}
-                </p>
-              </li>
-            ))}
-          </ul>
+              );
+            })}
+          </div>
         </CollapsibleSection>
       )}
 
@@ -786,14 +789,6 @@ export function ReportPanel({
         )}
       </div>
 
-      {/* Footer / Disclaimer */}
-      <div className="flex items-start gap-2.5 px-2 py-3">
-        <Bot className="h-4 w-4 text-muted-foreground/40 mt-0.5 shrink-0" />
-        <p className="text-xs text-muted-foreground/60 leading-relaxed">
-          AI-generated report -- Wound Monitor (MedGemma + MedSigLIP + MedASR).
-          For clinical decision support only. Does not constitute a diagnosis.
-        </p>
-      </div>
     </div>
   );
 }

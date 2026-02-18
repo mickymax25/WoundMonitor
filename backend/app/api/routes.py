@@ -20,8 +20,11 @@ from app import db
 from app.config import settings
 from app.schemas.wound import (
     AnalysisResult,
+    AssessmentImageResponse,
     AssessmentResponse,
     PatientCreate,
+    PatientReportInfo,
+    PatientReportResponse,
     PatientResponse,
     ReferralCreate,
     ReferralResponse,
@@ -58,6 +61,23 @@ def _html_escape(value: str) -> str:
     return html_lib.escape(str(value))
 
 
+def _to_url(path: str | None) -> str | None:
+    """Convert a filesystem upload path to a URL path served by the static mount."""
+    if not path:
+        return None
+    prefix = settings.UPLOAD_DIR
+    # Normalise: strip trailing slash from prefix
+    if not prefix.endswith("/"):
+        prefix += "/"
+    if path.startswith(prefix):
+        return "/uploads/" + path[len(prefix):]
+    # Also handle relative ./data/uploads/ form
+    alt_prefix = "./data/uploads/"
+    if path.startswith(alt_prefix):
+        return "/uploads/" + path[len(alt_prefix):]
+    return path
+
+
 def _save_upload(file: UploadFile, subdir: str) -> str:
     """Save an uploaded file to UPLOAD_DIR/<subdir> and return the relative path."""
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -91,11 +111,28 @@ def _assessment_to_response(a: dict[str, Any]) -> AssessmentResponse:
         except (json.JSONDecodeError, TypeError):
             pass
 
+    # Fetch associated images from assessment_images table
+    raw_images = db.get_assessment_images(a["id"])
+    images = [
+        AssessmentImageResponse(
+            id=img["id"],
+            image_path=_to_url(img["image_path"]) or img["image_path"],
+            is_primary=bool(img["is_primary"]),
+            caption=img.get("caption"),
+            created_at=img["created_at"],
+        )
+        for img in raw_images
+    ]
+
     return AssessmentResponse(
         id=a["id"],
         patient_id=a["patient_id"],
         visit_date=a["visit_date"],
-        image_path=a["image_path"],
+        image_path=_to_url(a["image_path"]) or a["image_path"],
+        source=a.get("source") or "nurse",
+        audio_path=_to_url(a.get("audio_path")),
+        text_notes=a.get("text_notes"),
+        images=images,
         time_classification=time_cls,
         zeroshot_scores=zeroshot,
         nurse_notes=a.get("nurse_notes"),
@@ -153,10 +190,12 @@ def _patient_response(patient: dict[str, Any]) -> PatientResponse:
         referring_physician_phone=patient.get("referring_physician_phone"),
         referring_physician_email=patient.get("referring_physician_email"),
         referring_physician_preferred_contact=patient.get("referring_physician_preferred_contact"),
+        patient_token=patient.get("patient_token") or "",
         created_at=patient["created_at"],
         latest_trajectory=latest.get("trajectory") if latest else None,
         latest_alert_level=latest.get("alert_level") if latest else None,
         assessment_count=len(assessments),
+        patient_reported_count=db.count_patient_reported(patient["id"]),
     )
 
 
@@ -168,6 +207,7 @@ def _patient_response(patient: dict[str, Any]) -> PatientResponse:
 def create_assessment(
     patient_id: str = Form(...),
     image: UploadFile = File(...),
+    additional_images: list[UploadFile] = File(default=[]),
     audio: UploadFile | None = File(None),
     visit_date: str | None = Form(None),
     text_notes: str | None = Form(None),
@@ -177,7 +217,7 @@ def create_assessment(
     if patient is None:
         raise HTTPException(status_code=404, detail="Patient not found.")
 
-    # Save image
+    # Save primary image
     image_path = _save_upload(image, f"patients/{patient_id}/images")
 
     # Save audio if present
@@ -193,6 +233,15 @@ def create_assessment(
         "text_notes": text_notes,
     }
     assessment = db.create_assessment(data)
+
+    # Insert primary image into assessment_images table
+    db.add_assessment_image(assessment["id"], image_path, is_primary=True)
+
+    # Save additional images
+    for extra_img in additional_images:
+        extra_path = _save_upload(extra_img, f"patients/{patient_id}/images")
+        db.add_assessment_image(assessment["id"], extra_path, is_primary=False)
+
     return _assessment_to_response(assessment)
 
 
@@ -276,6 +325,22 @@ def get_assessment(assessment_id: str) -> AssessmentResponse:
     return _assessment_to_response(assessment)
 
 
+@router.post("/assessments/{assessment_id}/images", response_model=AssessmentResponse)
+def add_assessment_images(
+    assessment_id: str,
+    images: list[UploadFile] = File(...),
+) -> AssessmentResponse:
+    """Add additional images to an existing assessment."""
+    assessment = db.get_assessment(assessment_id)
+    if assessment is None:
+        raise HTTPException(status_code=404, detail="Assessment not found.")
+    patient_id = assessment["patient_id"]
+    for img in images:
+        path = _save_upload(img, f"patients/{patient_id}/images")
+        db.add_assessment_image(assessment_id, path, is_primary=False)
+    return _assessment_to_response(db.get_assessment(assessment_id))
+
+
 # ---------------------------------------------------------------------------
 # Trajectory endpoint
 # ---------------------------------------------------------------------------
@@ -301,6 +366,55 @@ def get_trajectory(patient_id: str) -> list[TrajectoryPoint]:
             )
         )
     return points
+
+
+# ---------------------------------------------------------------------------
+# Patient self-reporting endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/patient-report/{token}/info", response_model=PatientReportInfo)
+def patient_report_info(token: str) -> PatientReportInfo:
+    """Public endpoint — returns minimal patient info for the upload page."""
+    patient = db.get_patient_by_token(token)
+    if patient is None:
+        raise HTTPException(status_code=404, detail="Invalid link.")
+    # Mask the name for privacy: first char + "***"
+    name = patient.get("name") or ""
+    masked = name[0] + "***" if name else "Patient"
+    return PatientReportInfo(
+        patient_name=masked,
+        wound_type=patient.get("wound_type"),
+        wound_location=patient.get("wound_location"),
+    )
+
+
+@router.post("/patient-report/{token}", response_model=PatientReportResponse, status_code=201)
+def patient_report_upload(
+    token: str,
+    image: UploadFile = File(...),
+    note: str | None = Form(None),
+) -> PatientReportResponse:
+    """Public endpoint — patient uploads a wound photo."""
+    patient = db.get_patient_by_token(token)
+    if patient is None:
+        raise HTTPException(status_code=404, detail="Invalid link.")
+
+    patient_id = patient["id"]
+    image_path = _save_upload(image, f"patients/{patient_id}/images")
+
+    data = {
+        "patient_id": patient_id,
+        "image_path": image_path,
+        "source": "patient",
+        "text_notes": note,
+    }
+    assessment = db.create_assessment(data)
+    db.add_assessment_image(assessment["id"], image_path, is_primary=True)
+
+    return PatientReportResponse(
+        assessment_id=assessment["id"],
+        message="Photo received. Your nurse will be notified.",
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -40,10 +40,12 @@ class PatientResponse(BaseModel):
     referring_physician_phone: str | None = None
     referring_physician_email: str | None = None
     referring_physician_preferred_contact: str | None = None
+    patient_token: str = ""
     created_at: str
     latest_trajectory: str | None = None
     latest_alert_level: str | None = None
     assessment_count: int = 0
+    patient_reported_count: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -71,11 +73,23 @@ class AssessmentCreate(BaseModel):
     visit_date: str | None = None  # ISO format, defaults to now
 
 
+class AssessmentImageResponse(BaseModel):
+    id: str
+    image_path: str
+    is_primary: bool
+    caption: str | None = None
+    created_at: str
+
+
 class AssessmentResponse(BaseModel):
     id: str
     patient_id: str
     visit_date: str
     image_path: str
+    source: str = "nurse"
+    audio_path: str | None = None
+    text_notes: str | None = None
+    images: list[AssessmentImageResponse] = []
     time_classification: TimeClassification | None = None
     zeroshot_scores: dict[str, float] | None = None
     nurse_notes: str | None = None
@@ -147,3 +161,18 @@ class ReferralResponse(BaseModel):
 
 class ReferralUpdate(BaseModel):
     status: str  # pending | sent | reviewed
+
+
+# ---------------------------------------------------------------------------
+# Patient self-reporting
+# ---------------------------------------------------------------------------
+
+class PatientReportInfo(BaseModel):
+    patient_name: str
+    wound_type: str | None = None
+    wound_location: str | None = None
+
+
+class PatientReportResponse(BaseModel):
+    assessment_id: str
+    message: str

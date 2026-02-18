@@ -43,7 +43,9 @@ def load_models() -> WoundAgent:
 
     logger.info("Initializing models (mock=%s, device=%s).", mock, device)
 
-    _medgemma = MedGemmaWrapper(settings.MEDGEMMA_MODEL, device, mock=mock)
+    _medgemma = MedGemmaWrapper(
+        settings.MEDGEMMA_MODEL, device, mock=mock, lora_path=settings.MEDGEMMA_LORA_PATH,
+    )
     _medgemma.load()
 
     _medsiglip = MedSigLIPWrapper(settings.MEDSIGLIP_MODEL, device, mock=mock)
@@ -66,6 +68,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     logger.info("Starting WoundChrono API.")
     db.init_db()
+    db.migrate_patient_tokens()
+    db.migrate_assessment_images()
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
     agent = load_models()

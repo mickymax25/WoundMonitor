@@ -103,6 +103,18 @@ export function alertDotColor(level: string | null): string {
 }
 
 // ---------------------------------------------------------------------------
+// Media URL helper — converts API-relative paths to full URLs
+// ---------------------------------------------------------------------------
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+export function mediaUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  if (path.startsWith("http")) return path;
+  return `${API_BASE}${path}`;
+}
+
+// ---------------------------------------------------------------------------
 // Image compression — resize + JPEG quality reduction before upload
 // ---------------------------------------------------------------------------
 

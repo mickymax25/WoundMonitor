@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "./data/uploads"
 
     MEDGEMMA_MODEL: str = "google/medgemma-1.5-4b-it"
+    MEDGEMMA_LORA_PATH: str = ""
     MEDSIGLIP_MODEL: str = "google/medsiglip-448"
     MEDASR_MODEL: str = "google/medasr"
 

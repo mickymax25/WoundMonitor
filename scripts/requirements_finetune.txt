@@ -1,0 +1,13 @@
+torch>=2.1.0
+transformers>=4.44.0
+peft>=0.14.0
+trl>=0.16.0
+bitsandbytes>=0.45.0
+datasets>=3.0.0
+accelerate>=1.0.0
+Pillow>=10.0.0
+tqdm
+scikit-learn
+pandas
+rouge-score
+kaggle

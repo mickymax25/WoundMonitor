@@ -518,14 +518,18 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
       <button
         type="button"
         onClick={() => {
-          const demo: AuthData = {
-            name: "Sarah Mitchell, RN",
-            email: "sarah@stmarys.med",
-            facility: "St. Mary's Medical Center",
-            role: "Wound Care Nurse",
-            loggedIn: true,
-          };
-          saveAuth(demo);
+          try {
+            const demo: AuthData = {
+              name: "Sarah Mitchell, RN",
+              email: "sarah@stmarys.med",
+              facility: "St. Mary's Medical Center",
+              role: "Wound Care Nurse",
+              loggedIn: true,
+            };
+            saveAuth(demo);
+          } catch {
+            // localStorage may be unavailable (private browsing)
+          }
           onAuth();
         }}
         className="mt-5 text-[12px] text-primary/70 hover:text-primary font-medium underline underline-offset-2 animate-slide-up"

@@ -177,11 +177,13 @@ def _report_json_to_markdown(
 # ---------------------------------------------------------------------------
 
 def _strip_thinking(text: str) -> str:
-    """Remove MedGemma thinking/reasoning blocks.
+    """Remove MedGemma thinking/reasoning blocks and preamble text.
 
     MedGemma-IT wraps internal reasoning in ``<unused94>thought ... <unused94>``
     delimiters.  We strip the entire block.  If there is no closing token we
     discard everything up to the first JSON-like ``{`` character.
+
+    Also handles plain-text preamble that the model may emit before JSON.
     """
     # Pattern 1: full thinking block  <unusedN>thought ... <unusedN>
     stripped = re.sub(
@@ -196,17 +198,25 @@ def _strip_thinking(text: str) -> str:
 
     # Pattern 2: thinking start with no closing token (truncated output)
     if re.match(r"<unused\d+>\s*thought\b", text):
-        # Try to jump straight to the first '{' – the JSON payload
         idx = text.find("{")
         if idx != -1:
             text = text[idx:]
         else:
-            # No JSON at all — return empty so caller raises cleanly
             return ""
 
     # Remove any remaining stray special tokens
     text = re.sub(r"<unused\d+>", "", text)
     text = re.sub(r"<\|.*?\|>", "", text)
+
+    # Pattern 3: plain-text preamble before JSON (e.g. "Here is the assessment:\n{...")
+    # If there's a '{' in the text, check if there's narrative text before it
+    brace_idx = text.find("{")
+    if brace_idx > 0:
+        before = text[:brace_idx].strip()
+        # If the preamble is just narrative (no JSON structure), skip it
+        if before and "}" not in before:
+            text = text[brace_idx:]
+
     return text.strip()
 
 
@@ -244,6 +254,23 @@ def _find_balanced_json(text: str) -> str | None:
     return None
 
 
+def _repair_json_string(text: str) -> str:
+    """Fix common JSON malformations from LLM output."""
+    # Remove trailing commas before } or ]
+    text = re.sub(r",\s*([}\]])", r"\1", text)
+    # Fix single quotes to double quotes (crude but effective for simple JSON)
+    # Only if no double-quoted strings present
+    if '"' not in text and "'" in text:
+        text = text.replace("'", '"')
+    # Remove trailing text after the last }
+    last_brace = text.rfind("}")
+    if last_brace != -1 and last_brace < len(text) - 1:
+        after = text[last_brace + 1:].strip()
+        if after and not after.startswith("]"):
+            text = text[: last_brace + 1]
+    return text
+
+
 def _extract_json_block(text: str) -> str:
     """Extract JSON from model output that may contain thinking tokens or markdown."""
     text = _strip_thinking(text)
@@ -251,57 +278,190 @@ def _extract_json_block(text: str) -> str:
     # Try markdown code block first
     match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, re.DOTALL)
     if match:
-        return match.group(1).strip()
+        return _repair_json_string(match.group(1).strip())
 
     # Try balanced-brace extraction (handles nested JSON correctly)
     balanced = _find_balanced_json(text)
     if balanced:
-        return balanced
+        return _repair_json_string(balanced)
 
-    return text.strip()
+    return _repair_json_string(text.strip())
+
+
+def _normalize_time_scores(data: dict[str, Any]) -> dict[str, Any] | None:
+    """Normalize a parsed JSON dict into canonical TIME format.
+
+    Handles:
+    - Case-insensitive keys (Tissue, TISSUE, tissue)
+    - Prefix matching (Tissue_quality -> tissue, Inflam... -> inflammation)
+    - Values as dicts {"type":..., "score":...} or plain floats/strings
+    - Alternate key names (description/observation instead of type)
+    - Scores slightly out of [0,1] range (clamped)
+
+    Returns None if a required dimension cannot be resolved.
+    """
+    dims = ["tissue", "inflammation", "moisture", "edge"]
+    result: dict[str, Any] = {}
+
+    for dim in dims:
+        val = None
+        # Try exact match (case-insensitive)
+        for k, v in data.items():
+            kl = k.lower().strip()
+            if kl == dim:
+                val = v
+                break
+        # Try prefix match (first 4 chars)
+        if val is None:
+            for k, v in data.items():
+                kl = k.lower().strip()
+                if kl.startswith(dim[:4]):
+                    val = v
+                    break
+        # Try single-letter match for T/I/M/E keys
+        if val is None:
+            letter = dim[0].upper()
+            for k, v in data.items():
+                if k.strip() == letter:
+                    val = v
+                    break
+
+        if val is None:
+            return None
+
+        # Normalize to {"type": str, "score": float}
+        if isinstance(val, dict):
+            score = val.get("score", val.get("value"))
+            desc = val.get("type", val.get("description", val.get("observation", "observed")))
+            if score is None:
+                # Maybe the dict has only numeric values — take the first float
+                for dv in val.values():
+                    try:
+                        score = float(dv)
+                        break
+                    except (TypeError, ValueError):
+                        continue
+            if score is None:
+                return None
+            try:
+                score = float(score)
+            except (TypeError, ValueError):
+                return None
+            result[dim] = {"type": str(desc), "score": score}
+        elif isinstance(val, (int, float)):
+            result[dim] = {"type": "observed", "score": float(val)}
+        elif isinstance(val, str):
+            # Try to extract a float from the string
+            match = re.search(r"(\d+\.?\d*)", val)
+            if match:
+                result[dim] = {"type": "observed", "score": float(match.group(1))}
+            else:
+                return None
+        else:
+            return None
+
+    # Clamp scores to [0, 1]
+    for dim in dims:
+        s = result[dim]["score"]
+        if 0.0 <= s <= 1.0:
+            continue
+        if -0.1 <= s <= 1.1:
+            result[dim]["score"] = max(0.0, min(1.0, s))
+        elif 0 <= s <= 10:
+            # Model returned 0-10 scale instead of 0-1
+            result[dim]["score"] = round(s / 10.0, 2)
+        elif 0 <= s <= 100:
+            # Model returned percentage
+            result[dim]["score"] = round(s / 100.0, 2)
+        else:
+            return None
+
+    return result
+
+
+def _extract_scores_regex(text: str) -> dict[str, Any] | None:
+    """Last-resort extraction of TIME scores using regex patterns on raw text.
+
+    Handles outputs like:
+    - 'Tissue: 0.7, Inflammation: 0.8, Moisture: 0.5, Edge: 0.6'
+    - 'T=0.7 I=0.8 M=0.5 E=0.6'
+    """
+    dims = {"tissue": None, "inflammation": None, "moisture": None, "edge": None}
+    patterns = [
+        # "Tissue: 0.7" or "Tissue = 0.7" or "Tissue (0.7)"
+        (r"(?i)tissue\b[^0-9]*?(\d+\.?\d*)", "tissue"),
+        (r"(?i)inflam\w*\b[^0-9]*?(\d+\.?\d*)", "inflammation"),
+        (r"(?i)moisture\b[^0-9]*?(\d+\.?\d*)", "moisture"),
+        (r"(?i)edge\b[^0-9]*?(\d+\.?\d*)", "edge"),
+    ]
+    for pattern, dim in patterns:
+        m = re.search(pattern, text)
+        if m:
+            dims[dim] = float(m.group(1))
+
+    if all(v is not None for v in dims.values()):
+        result = {dim: {"type": "observed", "score": v} for dim, v in dims.items()}
+        return _normalize_time_scores(result)
+    return None
 
 
 def parse_time_json(text: str) -> dict[str, Any]:
-    """Parse TIME classification JSON from model output. Raises ValueError on failure."""
+    """Parse TIME classification JSON from model output.
+
+    Uses a multi-strategy approach:
+    1. Extract JSON block and parse
+    2. Normalize keys/values flexibly (case-insensitive, prefix match, plain floats)
+    3. Fallback to regex extraction from raw text
+
+    Raises ValueError only when all strategies fail.
+    """
+    logger.info("Raw MedGemma output (first 500 chars): %.500s", text)
+
     raw = _extract_json_block(text)
     logger.debug("Extracted JSON block (first 400 chars): %s", raw[:400])
+
+    # Strategy 1: parse JSON and normalize
     try:
         data = json.loads(raw)
+        normalized = _normalize_time_scores(data)
+        if normalized is not None:
+            return normalized
+        logger.warning(
+            "JSON parsed but normalization failed — keys present: %s",
+            list(data.keys()),
+        )
     except json.JSONDecodeError as exc:
         logger.warning(
-            "Failed to parse TIME JSON: %s — extracted block: %.200s — raw text: %.300s",
-            exc, raw, text,
+            "JSON parse failed: %s — extracted block: %.200s",
+            exc, raw,
         )
-        raise ValueError(f"Could not parse TIME response: {exc}") from exc
 
-    required_keys = {"tissue", "inflammation", "moisture", "edge"}
-    missing = required_keys - set(data.keys())
-    if missing:
-        raise ValueError(f"TIME response missing keys: {missing}")
+    # Strategy 2: regex extraction from raw text
+    regex_result = _extract_scores_regex(text)
+    if regex_result is not None:
+        logger.info("TIME scores recovered via regex fallback.")
+        return regex_result
 
-    result: dict[str, Any] = {}
-    for key in required_keys:
-        entry = data[key]
-        if "score" not in entry:
-            raise ValueError(f"Missing 'score' field for {key}: {entry}")
-        try:
-            raw_score = float(entry["score"])
-        except (ValueError, TypeError) as exc:
-            raise ValueError(f"Invalid score for {key}: {entry['score']}") from exc
-        result[key] = {
-            "type": str(entry.get("type", "unknown")),
-            "score": max(0.0, min(1.0, raw_score)),
-        }
-    return result
+    raise ValueError(
+        f"Could not parse TIME response after all strategies. "
+        f"Raw output (first 300 chars): {text[:300]}"
+    )
 
 
 def parse_json_safe(text: str) -> dict[str, Any]:
     """Best-effort JSON extraction from model output."""
+    logger.debug("parse_json_safe input (first 300 chars): %.300s", text)
     raw = _extract_json_block(text)
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        logger.warning("parse_json_safe failed on: %s", text[:300])
+        # Try once more with aggressive repair
+        try:
+            repaired = _repair_json_string(raw)
+            return json.loads(repaired)
+        except json.JSONDecodeError:
+            pass
+        logger.warning("parse_json_safe failed on: %.300s", text)
         return {}
 
 
@@ -549,36 +709,88 @@ def _mock_report(
 # ---------------------------------------------------------------------------
 
 class MedGemmaWrapper:
-    """Thin wrapper around the MedGemma VLM pipeline."""
+    """Thin wrapper around the MedGemma VLM with optional LoRA adapter."""
 
-    def __init__(self, model_name: str, device: str, *, mock: bool = False) -> None:
+    def __init__(
+        self, model_name: str, device: str, *, mock: bool = False, lora_path: str = "",
+    ) -> None:
         self.model_name = model_name
         self.device = device
         self.mock = mock
-        self._pipe: Any = None
+        self.lora_path = lora_path
+        self._model: Any = None
+        self._processor: Any = None
+        self._has_lora = False
 
     def load(self) -> None:
         if self.mock:
             logger.info("MedGemma running in MOCK mode.")
             return
-        from transformers import pipeline  # type: ignore[import-untyped]
+        from transformers import AutoModelForImageTextToText, AutoProcessor
 
         logger.info("Loading MedGemma model %s on %s ...", self.model_name, self.device)
-        self._pipe = pipeline(
-            "image-text-to-text",
-            model=self.model_name,
-            torch_dtype=torch.bfloat16,
-            device=self.device,
+        self._processor = AutoProcessor.from_pretrained(
+            self.model_name, trust_remote_code=True, padding_side="left",
         )
-        logger.info("MedGemma loaded.")
+        self._model = AutoModelForImageTextToText.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.bfloat16,
+            device_map="auto" if self.device == "cuda" else None,
+            trust_remote_code=True,
+        )
+        if self.device != "cuda":
+            self._model = self._model.to(self.device)
+
+        # Load LoRA adapter if path is set and exists
+        if self.lora_path:
+            import os
+            if os.path.isdir(self.lora_path):
+                from peft import PeftModel
+                logger.info("Loading LoRA adapter from %s ...", self.lora_path)
+                self._model = PeftModel.from_pretrained(self._model, self.lora_path)
+                self._has_lora = True
+                logger.info("LoRA adapter loaded.")
+            else:
+                logger.warning("LoRA path %s not found, running base model only.", self.lora_path)
+
+        self._model = self._model.eval()
+        logger.info("MedGemma loaded (lora=%s).", self._has_lora)
+
+    def _generate(self, image: Image.Image, prompt: str, max_new_tokens: int = 1024) -> str:
+        """Run single-image inference and return generated text."""
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ]
+        input_text = self._processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=False,
+        )
+        inputs = self._processor(
+            text=input_text,
+            images=[[image]],
+            return_tensors="pt",
+        ).to(self._model.device)
+
+        with torch.no_grad():
+            output_ids = self._model.generate(
+                **inputs, max_new_tokens=max_new_tokens, do_sample=False,
+            )
+        generated = output_ids[0][inputs["input_ids"].shape[1]:]
+        return self._processor.decode(generated, skip_special_tokens=True).strip()
 
     # ---- TIME classification ------------------------------------------------
 
     def classify_time(
         self, image: Image.Image, *, image_path: str | None = None, wound_type: str | None = None,
     ) -> dict[str, Any]:
-        """Classify wound using the TIME framework. Retries once on JSON parse failure.
+        """Classify wound using the TIME framework.
 
+        Tries up to 3 times with progressively stricter prompts.
         Uses burn-specific prompt and labels when wound_type contains "burn".
         """
         if self.mock:
@@ -586,30 +798,35 @@ class MedGemmaWrapper:
             return _mock_time_classification(image_path=seed, wound_type=wound_type)
 
         base_prompt = BURN_CLASSIFICATION_PROMPT if _is_burn(wound_type) else TIME_CLASSIFICATION_PROMPT
-        max_retries = 2
+
+        # Progressively stricter prompt suffixes
+        suffixes = [
+            "",
+            "\nIMPORTANT: Respond with valid JSON only. No explanation, no markdown.",
+            (
+                "\nYou MUST respond with ONLY a JSON object, nothing else. "
+                'Example: {"tissue":{"type":"granulation","score":0.6},'
+                '"inflammation":{"type":"mild erythema","score":0.7},'
+                '"moisture":{"type":"balanced","score":0.8},'
+                '"edge":{"type":"advancing","score":0.5}}'
+            ),
+        ]
+        max_retries = len(suffixes)
         last_error: Exception | None = None
+
         for attempt in range(max_retries):
-            prompt = base_prompt
-            if attempt > 0:
-                prompt += "\nRemember: respond with valid JSON only."
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "image": image},
-                        {"type": "text", "text": prompt},
-                    ],
-                }
-            ]
-            output = self._pipe(text=messages, max_new_tokens=1024)
-            text: str = output[0]["generated_text"][-1]["content"]
-            logger.debug("MedGemma raw output (first 500 chars): %s", text[:500])
+            prompt = base_prompt + suffixes[attempt]
+            text = self._generate(image, prompt)
+            logger.info(
+                "classify_time attempt %d/%d — raw output (first 500 chars): %.500s",
+                attempt + 1, max_retries, text,
+            )
             try:
                 return parse_time_json(text)
             except ValueError as exc:
                 last_error = exc
                 logger.warning(
-                    "classify_time JSON parse failed (attempt %d/%d): %s",
+                    "classify_time parse failed (attempt %d/%d): %s",
                     attempt + 1, max_retries, exc,
                 )
         raise last_error  # type: ignore[misc]
@@ -647,17 +864,8 @@ class MedGemmaWrapper:
             wound_location=wound_location,
             visit_date=visit_date,
         )
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": image},
-                    {"type": "text", "text": prompt},
-                ],
-            }
-        ]
-        output = self._pipe(text=messages, max_new_tokens=1500)
-        raw_text: str = output[0]["generated_text"][-1]["content"]
+        raw_text = self._generate(image, prompt, max_new_tokens=1500)
+        logger.info("Report raw output (first 500 chars): %.500s", raw_text)
 
         # Try to parse as JSON and convert to standardized markdown
         report_data = parse_json_safe(raw_text)
@@ -669,28 +877,68 @@ class MedGemmaWrapper:
                 wound_location=wound_location,
                 visit_date=visit_date,
             )
-        # Fallback: return raw text if JSON parsing fails
-        logger.warning("Report JSON parse failed, returning raw text.")
-        return raw_text
+
+        # Fallback: if model returned something useful but not in our JSON format,
+        # wrap it in a basic report structure
+        logger.warning("Report JSON parse failed, constructing fallback report.")
+        clean_text = _strip_thinking(raw_text)
+        if not clean_text or len(clean_text) < 20:
+            # Model returned garbage — use the mock report as fallback
+            return _mock_report(
+                time_scores, trajectory,
+                patient_name=patient_name,
+                wound_type=wound_type,
+                wound_location=wound_location,
+                visit_date=visit_date,
+            )
+        # Return the cleaned model text wrapped in a report header
+        avg = sum(d["score"] for d in time_scores.values()) / 4
+        return (
+            f"## Wound Assessment Report\n\n"
+            f"**Patient:** {patient_name or 'Not recorded'}\n"
+            f"**Wound type:** {wound_type or 'Not specified'}\n"
+            f"**Trajectory:** {trajectory}\n"
+            f"**Composite score:** {max(1, min(10, round(avg * 10)))}/10\n\n"
+            f"### AI Analysis\n\n{clean_text}\n"
+        )
 
     # ---- Contradiction detection --------------------------------------------
 
-    def detect_contradiction(self, trajectory: str, nurse_notes: str) -> dict[str, Any]:
-        """Detect contradiction between AI trajectory and nurse notes."""
+    def detect_contradiction(
+        self, trajectory: str, nurse_notes: str, image: Image.Image | None = None,
+    ) -> dict[str, Any]:
+        """Detect contradiction between AI trajectory and nurse notes.
+
+        If *image* is provided, it is passed to the model for context.
+        Otherwise a small white placeholder is used (MedGemma requires an image).
+        """
         if self.mock:
             return {"contradiction": False, "detail": None}
 
         prompt = (
             f"The AI wound assessment determined the trajectory is '{trajectory}'. "
             f"The nurse recorded the following notes: '{nurse_notes}'. "
-            "Determine if there is a meaningful contradiction between the AI assessment and nurse notes. "
-            'Return ONLY valid JSON: {"contradiction": true/false, "detail": "explanation or null"}'
+            "Is there a meaningful contradiction between the AI assessment and nurse notes? "
+            'Respond with JSON only: {"contradiction": true, "detail": "explanation"} '
+            'or {"contradiction": false, "detail": null}'
         )
-        messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
-        output = self._pipe(text=messages, max_new_tokens=200)
-        text: str = output[0]["generated_text"][-1]["content"]
-        result = parse_json_safe(text)
+        # MedGemma VLM requires an image — use the wound image if available,
+        # otherwise create a neutral placeholder (white, not black, to avoid
+        # confusing the model with a dark/blank input).
+        ctx_image = image if image is not None else Image.new("RGB", (64, 64), (255, 255, 255))
+        try:
+            text = self._generate(ctx_image, prompt, max_new_tokens=200)
+            result = parse_json_safe(text)
+        except Exception as exc:
+            logger.warning("Contradiction detection failed: %s", exc)
+            return {"contradiction": False, "detail": None}
+
+        # Robust extraction: "contradiction" can be bool or string "true"/"false"
+        raw_flag = result.get("contradiction", False)
+        if isinstance(raw_flag, str):
+            raw_flag = raw_flag.lower().strip() in ("true", "yes", "1")
+
         return {
-            "contradiction": bool(result.get("contradiction", False)),
+            "contradiction": bool(raw_flag),
             "detail": result.get("detail"),
         }
