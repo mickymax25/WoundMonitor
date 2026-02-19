@@ -272,6 +272,7 @@ export function AssessmentPanel({
       const analysisResult = await analyzeAssessment(assessment.id);
 
       setStep("done");
+      await new Promise((r) => setTimeout(r, 1200));
       onAnalysisComplete(analysisResult);
     } catch (err) {
       setStep("error");
@@ -333,22 +334,33 @@ export function AssessmentPanel({
                 </button>
               </div>
             )}
-            {/* Processing overlay */}
-            {isProcessing && (
+            {/* Processing / Done overlay */}
+            {(isProcessing || step === "done") && (
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-                <div className="w-[260px]">
-                  <div className="text-center mb-4">
-                    <Loader2 className="h-7 w-7 animate-spin text-primary mx-auto mb-2" />
-                    <p className="text-[13px] text-foreground font-semibold">
-                      {step === "uploading" ? "Uploading..." : "Analyzing wound..."}
+                {step === "done" ? (
+                  <div className="flex flex-col items-center gap-3 animate-fade-in-up">
+                    <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center ring-2 ring-emerald-500/30">
+                      <CheckCircle className="h-8 w-8 text-emerald-400" />
+                    </div>
+                    <p className="text-[14px] text-emerald-400 font-semibold">
+                      Analysis Complete
                     </p>
                   </div>
-                  {step === "analyzing" && <AnalysisSteps />}
-                </div>
+                ) : (
+                  <div className="w-[260px]">
+                    <div className="text-center mb-4">
+                      <Loader2 className="h-7 w-7 animate-spin text-primary mx-auto mb-2" />
+                      <p className="text-[13px] text-foreground font-semibold">
+                        {step === "uploading" ? "Uploading..." : "Analyzing wound..."}
+                      </p>
+                    </div>
+                    {step === "analyzing" && <AnalysisSteps />}
+                  </div>
+                )}
               </div>
             )}
             {/* Remove button */}
-            {!isProcessing && (
+            {!isProcessing && step !== "done" && (
               <button
                 type="button"
                 onClick={clearImage}
