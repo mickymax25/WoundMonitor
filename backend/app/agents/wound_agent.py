@@ -105,6 +105,43 @@ def _determine_alert(
     return {"level": level, "detail": detail}
 
 
+def _extract_healing_comment(report: str, trajectory: str) -> str:
+    """Extract the clinical summary from the model-generated report.
+
+    Falls back to a trajectory-aware comment if extraction fails.
+    """
+    import re
+
+    # Try to extract "### Clinical Summary" section from markdown report
+    match = re.search(
+        r"###\s*Clinical Summary\s*\n+(.+?)(?=\n###|\n##|\Z)",
+        report,
+        re.DOTALL,
+    )
+    if match:
+        summary = match.group(1).strip()
+        # Strip non-ASCII garbage (model hallucinations)
+        clean = re.sub(r"[^\x20-\x7E]", "", summary).strip()
+        # Remove broken possessives left after stripping: "patient'" -> "patient's"
+        clean = re.sub(r"(\w)'\s*,", r"\1's", clean)
+        if len(clean) < 15:
+            clean = ""  # too short after cleaning, use fallback
+        # Take only the first sentence if it's too long
+        if clean and len(clean) > 120:
+            first_sentence = re.split(r"(?<=[.!?])\s", clean, maxsplit=1)
+            clean = first_sentence[0]
+        if clean:
+            return clean
+
+    # Fallback: trajectory-aware comment
+    return {
+        "improving": "Wound showing improvement since last visit.",
+        "stable": "Wound status stable — continue monitoring.",
+        "deteriorating": "Wound deteriorating — intervention recommended.",
+        "baseline": "Initial assessment — baseline established.",
+    }.get(trajectory, "Assessment complete.")
+
+
 # ---------------------------------------------------------------------------
 # Agent
 # ---------------------------------------------------------------------------
@@ -216,6 +253,9 @@ class WoundAgent:
         logger.info("Step 8: Determining alert level.")
         alert = _determine_alert(trajectory, time_scores, contradiction)
 
+        # Step 9: Extract healing comment from report
+        healing_comment = _extract_healing_comment(report, trajectory)
+
         # Persist results
         update_data: dict[str, Any] = {
             "tissue_type": time_scores["tissue"]["type"],
@@ -236,6 +276,7 @@ class WoundAgent:
             "report_text": report,
             "alert_level": alert["level"],
             "alert_detail": alert.get("detail"),
+            "healing_comment": healing_comment,
         }
         self.db.update_assessment(assessment_id, update_data)
 

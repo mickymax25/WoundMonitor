@@ -76,6 +76,7 @@ export interface AssessmentResponse {
   report_text: string | null;
   alert_level: string | null;
   alert_detail: string | null;
+  healing_comment: string | null;
   created_at: string;
 }
 
@@ -90,6 +91,7 @@ export interface AnalysisResult {
   report_text: string;
   alert_level: string;
   alert_detail: string | null;
+  healing_comment: string | null;
 }
 
 export interface TrajectoryPoint {
@@ -114,8 +116,17 @@ export type WoundType =
 export type WoundLocation =
   | "left_foot"
   | "right_foot"
+  | "left_heel"
+  | "right_heel"
   | "sacrum"
-  | "leg"
+  | "coccyx"
+  | "left_ischium"
+  | "right_ischium"
+  | "left_trochanter"
+  | "right_trochanter"
+  | "occiput"
+  | "left_leg"
+  | "right_leg"
   | "hand"
   | "arm"
   | "torso"
@@ -133,10 +144,19 @@ export const WOUND_TYPES: { value: WoundType; label: string }[] = [
 ];
 
 export const WOUND_LOCATIONS: { value: WoundLocation; label: string }[] = [
+  { value: "sacrum", label: "Sacrum" },
+  { value: "coccyx", label: "Coccyx" },
+  { value: "left_heel", label: "Left Heel" },
+  { value: "right_heel", label: "Right Heel" },
+  { value: "left_ischium", label: "Left Ischium" },
+  { value: "right_ischium", label: "Right Ischium" },
+  { value: "left_trochanter", label: "Left Trochanter" },
+  { value: "right_trochanter", label: "Right Trochanter" },
+  { value: "occiput", label: "Occiput" },
   { value: "left_foot", label: "Left Foot" },
   { value: "right_foot", label: "Right Foot" },
-  { value: "sacrum", label: "Sacrum" },
-  { value: "leg", label: "Leg" },
+  { value: "left_leg", label: "Left Leg" },
+  { value: "right_leg", label: "Right Leg" },
   { value: "hand", label: "Hand" },
   { value: "arm", label: "Arm" },
   { value: "torso", label: "Torso" },

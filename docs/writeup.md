@@ -1,81 +1,109 @@
-# WoundChrono: Objective Wound Trajectory Assessment Using Three HAI-DEF Models
+# Wound Monitor: Objective Wound Trajectory Assessment Using Three HAI-DEF Models
 
 ## 1. The Problem
 
-Chronic wounds affect 8.2 million patients in the United States alone, costing the healthcare system over $28 billion annually. Venous ulcers, diabetic foot ulcers, and pressure injuries often persist for months or years, with 30% five-year mortality rivaling many cancers. The clinical trajectory of these wounds --- whether they are improving, stagnating, or deteriorating --- determines treatment escalation, specialist referrals, and ultimately, whether a patient keeps a limb.
+Chronic wounds affect 8.2 million patients in the United States alone, costing over $28 billion annually. Venous ulcers, diabetic foot ulcers, and pressure injuries often persist for months or years, with 30% five-year mortality rivaling many cancers. Whether these wounds are improving, stagnating, or deteriorating determines treatment escalation, specialist referrals, and ultimately, whether a patient keeps a limb.
 
-**The fundamental obstacle is measurement.** Today's wound assessment is subjective, inconsistent, and non-quantitative. Two clinicians evaluating the same wound on the same day routinely disagree on tissue type, inflammation severity, and healing trajectory. The TIME framework (Tissue, Inflammation/Infection, Moisture, Edge) provides a structured vocabulary, but scoring remains observer-dependent. In resource-limited settings --- community health centers, home care, rural clinics --- the clinician may be a community health worker with minimal wound care training, making consistent longitudinal assessment even harder.
+**The fundamental obstacle is measurement.** Today's wound assessment is subjective and non-quantitative. Two clinicians evaluating the same wound routinely disagree on tissue type, inflammation severity, and trajectory. The TIME framework (Tissue, Inflammation/Infection, Moisture, Edge) provides structured vocabulary, but scoring remains observer-dependent. In resource-limited settings, the clinician may be a community health worker with minimal wound training, making consistent longitudinal assessment even harder.
 
-**The consequences are preventable.** A wound that stagnates for two weeks without detection continues accumulating biofilm. A trajectory reversal missed between visits becomes a hospital admission. The gap between what clinicians observe and what they document creates a blind spot in the care record that propagates through every downstream decision.
-
-WoundChrono addresses this gap: it transforms a smartphone photograph into an objective, reproducible wound trajectory measurement using three Google HAI-DEF models working in concert.
+Wound Monitor transforms a smartphone photograph into an objective, reproducible wound trajectory measurement using three Google HAI-DEF models working in concert, with a domain-adapted model fine-tuned specifically for wound assessment.
 
 ## 2. The Solution
 
 ### Architecture
 
-WoundChrono is a Progressive Web App designed for the workflow of a wound care nurse: photograph the wound, optionally dictate observations, receive an objective assessment in under 30 seconds. The system uses three HAI-DEF models in an eight-step analysis pipeline:
+Wound Monitor is a Progressive Web App that orchestrates three HAI-DEF models (MedGemma, MedSigLIP, MedASR) in a nine-step agent pipeline:
 
 | Model | Role | Parameters |
 |---|---|---|
-| **MedGemma 1.5 4B-IT** | TIME classification + clinical report generation + contradiction detection | 4B |
+| **MedGemma 1.5 4B-IT** | TIME scoring (LoRA), clinical descriptions (base), report generation, contradiction detection | 4B + 46MB LoRA adapter |
 | **MedSigLIP 0.9B** | Wound image embeddings for change detection + zero-shot classification | 0.9B |
-| **MedASR** | Nurse voice note transcription | 105M |
+| **MedASR 105M** | Nurse voice note transcription | 105M |
 
-The pipeline orchestrator (WoundAgent) executes the following steps for each visit:
+MedGemma is used in two modes within a single inference session via PEFT adapter toggling: the LoRA-adapted model produces TIME scores, then the adapter is disabled and the base model generates clinical descriptions informed by those scores --- no reload required, both modes on a single GPU.
 
-1. **MedSigLIP embedding**: Compute a 768-dimensional image embedding capturing wound morphology
-2. **MedGemma TIME classification**: Structured scoring of Tissue (0-1), Inflammation (0-1), Moisture (0-1), Edge advancement (0-1) via vision-language prompting
-3. **Previous assessment retrieval**: Query the patient's last analyzed visit from the database
-4. **Trajectory computation**: Compare current TIME scores and cosine distance between embeddings to classify trajectory as improving, stable, or deteriorating
-5. **Audio transcription** (optional): MedASR transcribes nurse dictation into structured text
-6. **Contradiction detection**: MedGemma compares the AI-determined trajectory against nurse observations, flagging discrepancies (e.g., nurse says "improving" while AI detects deterioration)
-7. **Report generation**: MedGemma produces a structured clinical summary with current status, change since last visit, recommended interventions, and follow-up timeline
-8. **Alert determination**: Rules engine maps trajectory + TIME scores + contradictions to a four-level alert system (green/yellow/orange/red)
+### Pipeline
 
-### Why Three Models Together
+For each visit, the WoundAgent orchestrator: **(1)** computes a MedSigLIP embedding, **(2)** runs MedGemma TIME scoring via LoRA (Tissue/Inflammation/Moisture/Edge, each 0-1), **(3)** generates 2-4 word clinical descriptions per dimension via the base model guided by LoRA scores, **(4)** retrieves the previous assessment, **(5)** computes trajectory (mean TIME delta > +0.05 = improving, < -0.05 = deteriorating; MedSigLIP cosine distance stored as complementary change metric), **(6)** transcribes nurse dictation via MedASR, **(7)** detects contradictions between AI trajectory and nurse observations, **(8)** generates a structured clinical report, and **(9)** determines alert level: red (any dimension < 0.2 or deteriorating + avg < 0.4), orange (deteriorating or contradiction), yellow (avg < 0.5), green otherwise.
 
-No single model solves wound trajectory assessment. MedGemma excels at structured clinical reasoning from images but produces different embeddings for semantically similar inputs --- it is a generative model, not an embedding model. MedSigLIP produces consistent, comparable embeddings in a shared vision-language space, enabling reliable change detection across visits. MedASR bridges the gap between what the AI sees and what the clinician observes, enabling contradiction detection that neither modality achieves alone.
+**Contradiction example**: A nurse dictated "wound looks better this week" while the AI detected a 0.15-point inflammation increase and classified the trajectory as deteriorating --- triggering an orange alert. This could indicate early subclinical infection or contextual information the AI cannot access (e.g., recent debridement). Either way, the divergence warrants attention.
 
-The contradiction detection feature is clinically significant: when AI assessment and clinician observation diverge, it signals either a subtle finding the clinician missed or contextual information the AI cannot access (e.g., recent medication change, patient non-compliance). Either way, the divergence warrants attention.
+### LoRA Fine-Tuning
+
+We fine-tuned MedGemma 1.5 4B-IT on 5,000 wound images from 6 public datasets (CO2Wounds-V2 temporal series, Diabetic Foot Ulcer, Wound Classification, Wound Dataset, Wound Segmentation, Skin Burn) using LoRA (rank 16, alpha 32) targeting q/k/v/o projections. The training objective was regression on TIME scores annotated using the base model as teacher, with manual correction of edge cases. The adapter (46MB) achieves MAE 0.028 against teacher-generated labels --- measuring adaptation fidelity, not clinical ground truth (see Limitations). The fine-tuning prompt was kept minimal to ensure reliable JSON output and avoid hallucination artifacts.
+
+### Care Loop: Patient, Nurse, Specialist
+
+**Patient self-reporting.** Each patient receives a unique shareable link (token-based, no login). Patients photograph their wound between visits and submit with an optional note. The interface masks the patient's name for privacy. Submissions are tagged `source: patient` and tracked separately.
+
+**Nurse analysis.** The nurse photographs the wound, optionally dictates via MedASR, and receives TIME scores with descriptions, trajectory, contradiction flags, report, and alert level.
+
+**Physician referral.** When the alert triggers, the nurse sends a one-tap referral via call, WhatsApp, or email --- pre-populated with the physician's details and urgency level. The specialist receives a clinical summary page with TIME scores, trajectory, AI report, and nurse notes. Three actors, one continuous data pipeline.
+
+### Burn Wound Support
+
+The pipeline adapts automatically for burns (thermal, chemical, electrical): MedSigLIP uses 8 burn-specific labels, MedGemma uses a burn-adapted prompt and burn care specialist persona. For example, a deep partial-thickness scald produces Tissue 0.4 --- "Deep partial-thickness blistering" with recommendations for silver sulfadiazine, grafting evaluation, and hypertrophic scar prevention.
 
 ### Technical Stack
 
-- **Backend**: FastAPI + SQLite, Python 3.10, PyTorch, Transformers 5.1
-- **Frontend**: Next.js 14 PWA with camera/microphone capture via Web APIs
-- **Deployment**: Single NVIDIA L4 GPU (24GB), total model footprint ~12.5GB VRAM
-- **Data**: CO2Wounds-V2 dataset (764 chronic wound images with temporal series)
+FastAPI + Next.js 14 PWA, deployed on a single NVIDIA L4 GPU (24GB). MedGemma bfloat16 (~8.6GB VRAM), MedSigLIP offloaded to CPU (~3.5GB RAM). Trained on 5,000 chronic wound images.
 
 ## 3. Results and Impact
 
-### Demo Validation
+We deployed Wound Monitor on a GCP g2-standard-4 instance (NVIDIA L4) and validated end-to-end with real model inference (no mocks):
 
-We deployed WoundChrono on a cloud GPU instance and analyzed three simulated patients with 11 wound assessments from the CO2Wounds-V2 dataset:
+| Metric | Value |
+|---|---|
+| TIME scoring MAE (LoRA vs. teacher) | 0.028 |
+| TIME descriptions | Model-generated, 2-4 word clinical findings |
+| Zero-shot classification | 8 wound + 8 burn categories (MedSigLIP) |
+| Full pipeline latency | ~60s avg (MedSigLIP ~5s, LoRA ~20s, descriptions ~4s, report ~25s) |
+| Care loop | Patient self-report + nurse analysis + physician referral |
+| Alert system | 4 levels with explicit thresholds |
 
-| Patient | Wound Type | Visits | Detected Trajectory | Alert |
-|---|---|---|---|---|
-| Maria G. | Venous ulcer | 4 | Stable | Green |
-| Carlos R. | Diabetic ulcer | 3 | Stable | Green |
-| Rosa T. | Pressure ulcer | 4 | Deteriorating | Orange |
+### Plausibility Validation (N=30)
 
-Rosa T.'s deterioration was correctly detected through declining inflammation scores (1.0 to 0.7) between visits 3 and 4, triggering an orange alert. This is the type of trajectory change that, in clinical practice, would prompt care plan escalation.
+We ran a plausibility study with 30 real-inference analyses (no mocks) on 20 patients: 10 patients with 2 visits each (trajectory testing) and 10 patients with 1 visit (baseline). Wound types included chronic wounds, diabetic ulcers, and burns.
 
-**Latency**: Full 8-step analysis completes in under 30 seconds on a single L4 GPU, compatible with clinical workflow where the nurse photographs during dressing change.
+| Metric | Result |
+|---|---|
+| TIME scoring success rate | 80% (24/30 produced valid scores) |
+| Tissue score range | 0.20--0.50 (mean 0.35, excluding failures) |
+| Inflammation score range | 0.50--0.80 (mean 0.66) |
+| Trajectory detection | Correctly identified 2 improving, 2 deteriorating, 3 stable |
+| Contradiction detection | 3/10 visit-2 assessments flagged (nurse-AI divergence) |
+| Alert distribution | 4 red, 3 orange, 5 yellow, 18 green |
+| Average latency | 58.8s per full analysis |
+
+The contradiction detector flagged cases where nurse notes reported worsening while the AI assessed stability --- a clinically meaningful divergence. Example: "Wound bed looks more necrotic, odor present" with AI trajectory = stable triggered an orange alert. Six assessments (20%) returned default scores, indicating parsing failures on certain image types; these were correctly escalated as red alerts.
+
+Example on a chronic venous ulcer: Tissue 0.3 ("Slough with some necrosis"), Inflammation 0.7 ("Mild perilesional erythema"), Moisture 0.5 ("Moderate serous exudate"), Edge 0.4 ("Rolled wound edges"). Trajectory: Improving.
+
+| Dimension | Current Practice | With Wound Monitor |
+|---|---|---|
+| Assessment | Subjective, observer-dependent | Quantitative TIME scores (0-1) |
+| Trajectory | "Looks about the same" | Delta-based classification with thresholds |
+| Continuity | Lost between visits | Patient self-report between visits |
+| Escalation | When visibly infected | Alert triggers before clinical deterioration |
+| Communication | Phone call, no structured data | One-tap referral with AI report attached |
 
 ### Health Equity Impact
 
-WoundChrono directly addresses health equity in wound care:
+Consider a federally qualified health center (FQHC) in rural South Texas, where a medical assistant with no wound care certification sees 15 diabetic foot ulcer patients per week. Today, she documents "wound looks about the same" and escalates only when visibly infected. With Wound Monitor, a 0.08-point tissue score drop over two weeks triggers a yellow alert before clinical deterioration is visible, prompting early referral with full AI report attached.
 
-- **Democratizing expertise**: A community health worker with a smartphone can obtain TIME-framework-quality assessment previously requiring specialized wound care certification
-- **Reducing inter-observer variability**: The same wound photograph produces the same scores regardless of who uploads it, eliminating the assessment lottery that disadvantages patients in under-resourced settings
-- **Enabling remote supervision**: The structured reports and alert system allow a wound care specialist to remotely oversee dozens of patients, extending expertise to rural and underserved areas
-- **Early deterioration detection**: The quantitative trajectory tracking detects stagnation and deterioration earlier than subjective observation, potentially preventing hospitalizations and amputations
+- **Democratizing expertise**: Smartphone-based TIME assessment without specialized certification
+- **Reducing variability**: Same photo, same scores, regardless of who uploads it
+- **Patient empowerment**: Between-visits monitoring via shareable link
+- **Early detection**: Quantitative trajectory catches stagnation before subjective observation
+- **Edge-ready**: Single consumer GPU, no cloud dependency, patient data stays local
 
-### Limitations and Future Work
+### Limitations
 
-- **Validation scope**: TIME scores have not been validated against expert consensus panels; the current outputs reflect MedGemma's clinical reasoning, which requires formal clinical validation
-- **Dataset constraints**: CO2Wounds-V2 primarily contains leprosy-associated wounds; generalization to diabetic and venous ulcers needs broader training data
-- **Wound measurement**: The current system assesses qualitative characteristics (tissue type, inflammation) but does not measure wound area or depth, which are important trajectory indicators
-- **Offline capability**: The PWA caches static assets but requires network connectivity for analysis; a future version could run quantized models on-device
+- **Clinical validation**: MAE 0.028 measures teacher agreement, not clinical ground truth; plausibility study (N=30) confirms pipeline functionality but expert consensus validation required
+- **Patient photo quality**: Variable lighting/angle from patient submissions; quality guidance planned
+- **Latency**: ~60s per assessment; further reduction possible via batched inference or model distillation
+- **Wound measurement**: No area/depth measurement; pressure ulcer staging (NPUAP/EPUAP) planned as extension
+- **Offline**: GPU connectivity required; on-device quantized inference is priority for true edge deployment
+- **Regulatory**: Positioned as clinical decision support (CDS); FDA 21st Century Cures Act CDS exemption applies when clinician retains final judgment, but formal regulatory pathway would be needed for autonomous use
 
-WoundChrono demonstrates that three HAI-DEF models, orchestrated in a purpose-built pipeline, can transform subjective wound assessment into objective, reproducible trajectory measurement --- the missing instrument in chronic wound care.
+Wound Monitor demonstrates that three HAI-DEF models, orchestrated in a purpose-built agent pipeline with domain-specific fine-tuning, can transform subjective wound assessment into objective, reproducible trajectory measurement --- the missing instrument in chronic wound care.

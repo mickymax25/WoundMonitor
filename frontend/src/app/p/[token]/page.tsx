@@ -133,11 +133,14 @@ export default function PatientReportPage({
       {/* Header */}
       <header className="px-5 pt-safe-top">
         <div className="flex items-center gap-3 py-4">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-md shadow-blue-500/20">
-            <Camera className="w-4.5 h-4.5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-[15px] font-semibold text-slate-800">Wound Monitor</h1>
+          <img
+            src="/LogoWM_V2.png"
+            alt="Wound Monitor"
+            height={36}
+            width={160}
+            className="h-9 w-auto"
+          />
+          <div className="ml-auto">
             <p className="text-[11px] text-slate-400">
               {info ? `For ${info.patient_name}` : "Photo upload"}
             </p>

@@ -43,15 +43,12 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       {/* Logo + Title */}
       <div className="flex flex-col items-center animate-fade-in-up">
         <img
-          src="/logo.png"
+          src="/LogoWM_V2.png"
           alt="Wound Monitor"
-          width={100}
+          width={240}
           height={100}
-          className="mb-3"
+          className="mb-2"
         />
-        <h1 className="text-2xl font-bold text-foreground tracking-tight">
-          Wound Monitor
-        </h1>
         <p className="text-sm text-muted-foreground mt-1.5">
           AI-Powered Wound Assessment
         </p>

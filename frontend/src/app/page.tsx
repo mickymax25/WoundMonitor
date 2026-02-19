@@ -91,22 +91,17 @@ export default function Page() {
         <div className="absolute w-48 h-48 rounded-full bg-violet-500/[0.06] blur-[60px] splash-glow" style={{ animationDelay: "200ms" }} />
 
         {/* Logo + App name */}
-        <div className="relative flex flex-col items-center gap-5 splash-logo">
+        <div className="relative flex flex-col items-center gap-3 splash-logo">
           <img
-            src="/logo.png"
+            src="/LogoWM_V2.png"
             alt="Wound Monitor"
-            width={160}
-            height={160}
+            width={360}
+            height={150}
             className="drop-shadow-[0_0_60px_rgba(59,130,246,0.3)]"
           />
-          <div className="flex flex-col items-center gap-1 splash-text">
-            <h1 className="text-xl font-bold text-foreground tracking-tight">
-              Wound Monitor
-            </h1>
-            <p className="text-[11px] text-muted-foreground/60 tracking-wide uppercase">
-              AI-Powered Assessment
-            </p>
-          </div>
+          <p className="text-[11px] text-muted-foreground/60 tracking-wide uppercase splash-text">
+            AI-Powered Assessment
+          </p>
         </div>
       </div>
     );

@@ -55,11 +55,15 @@ class MedSigLIPWrapper:
             return
         from transformers import SiglipModel, SiglipImageProcessor, SiglipTokenizer  # type: ignore[import-untyped]
 
-        logger.info("Loading MedSigLIP model %s on %s ...", self.model_name, self.device)
-        self._model = SiglipModel.from_pretrained(self.model_name).to(self.device)
+        # Force CPU to keep GPU VRAM free for MedGemma + LoRA
+        self._infer_device = "cpu"
+        logger.info("Loading MedSigLIP model %s on %s (GPU reserved for MedGemma) ...", self.model_name, self._infer_device)
+        self._model = SiglipModel.from_pretrained(
+            self.model_name, torch_dtype=torch.float32,
+        ).to(self._infer_device)
         self._image_processor = SiglipImageProcessor.from_pretrained(self.model_name)
         self._tokenizer = SiglipTokenizer.from_pretrained(self.model_name)
-        logger.info("MedSigLIP loaded.")
+        logger.info("MedSigLIP loaded on CPU.")
 
     # ---- Embedding ----------------------------------------------------------
 
@@ -70,7 +74,7 @@ class MedSigLIPWrapper:
             rng = np.random.default_rng(seed)
             return rng.standard_normal(768).astype(np.float32)
 
-        inputs = self._image_processor(images=image, return_tensors="pt").to(self.device)
+        inputs = self._image_processor(images=image, return_tensors="pt").to(self._infer_device)
         with torch.no_grad():
             output = self._model.get_image_features(**inputs)
         # Handle both tensor and BaseModelOutputWithPooling returns
@@ -98,8 +102,8 @@ class MedSigLIPWrapper:
             total = sum(raw)
             return {label: round(val / total, 4) for label, val in zip(labels, raw)}
 
-        text_inputs = self._tokenizer(labels, return_tensors="pt", padding=True).to(self.device)
-        image_inputs = self._image_processor(images=image, return_tensors="pt").to(self.device)
+        text_inputs = self._tokenizer(labels, return_tensors="pt", padding=True).to(self._infer_device)
+        image_inputs = self._image_processor(images=image, return_tensors="pt").to(self._infer_device)
         inputs = {**text_inputs, **image_inputs}
         with torch.no_grad():
             outputs = self._model(**inputs)

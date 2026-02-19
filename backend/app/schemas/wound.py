@@ -100,6 +100,7 @@ class AssessmentResponse(BaseModel):
     report_text: str | None = None
     alert_level: str | None = None
     alert_detail: str | None = None
+    healing_comment: str | None = None
     created_at: str
 
 
@@ -132,6 +133,7 @@ class AnalysisResult(BaseModel):
     report_text: str
     alert_level: str
     alert_detail: str | None = None
+    healing_comment: str | None = None
 
 
 # ---------------------------------------------------------------------------

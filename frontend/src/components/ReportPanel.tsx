@@ -627,7 +627,7 @@ export function ReportPanel({
                 {trajectoryConfig.label}
               </div>
               <p className="text-[12px] text-muted-foreground leading-snug">
-                {healingLabel(healingScore)}
+                {result.healing_comment || healingLabel(healingScore)}
               </p>
             </div>
           </div>

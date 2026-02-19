@@ -22,31 +22,19 @@ logger = logging.getLogger(__name__)
 # Prompt templates
 # ---------------------------------------------------------------------------
 
-TIME_CLASSIFICATION_PROMPT = """\
-Wound care specialist. Classify this wound photograph using the TIME framework.
-Score each dimension independently from 0.0 (worst) to 1.0 (best).
-Be specific: each wound has different characteristics per dimension. Describe what you see.
+TIME_CLASSIFICATION_PROMPT = (
+    "Classify this wound using the TIME framework. "
+    "Score T/I/M/E from 0.0 (worst) to 1.0 (best). "
+    "For each dimension include a brief clinical observation. "
+    "Respond with JSON only."
+)
 
-T (Tissue): 0.0=necrotic eschar → 0.3=fibrin slough → 0.6=granulation → 0.9=epithelializing → 1.0=healed.
-I (Inflammation): 0.0=severe infection/cellulitis → 0.3=purulent exudate → 0.6=mild erythema → 0.9=minimal → 1.0=none.
-M (Moisture): 0.0=desiccated or macerated → 0.3=imbalanced → 0.6=nearly balanced → 0.9=optimal → 1.0=perfect.
-E (Edge): 0.0=undermined/tunneling → 0.3=rolled edges → 0.6=attached/contracting → 0.9=advancing → 1.0=closed.
-
-Respond with JSON only:
-{"tissue":{"type":"what you observe","score":0.00},"inflammation":{"type":"what you observe","score":0.00},"moisture":{"type":"what you observe","score":0.00},"edge":{"type":"what you observe","score":0.00}}"""
-
-BURN_CLASSIFICATION_PROMPT = """\
-Burn care specialist. Classify this burn wound photograph using 4 clinical dimensions.
-Score each dimension independently from 0.0 (worst) to 1.0 (best/healed).
-Be specific: describe what you see in the image.
-
-T (Tissue/Depth): 0.0=deep full-thickness eschar/charring → 0.3=deep partial-thickness with necrosis → 0.5=superficial partial-thickness with blistering → 0.7=debrided clean wound bed → 0.9=active re-epithelialization → 1.0=healed.
-I (Inflammation): 0.0=burn wound sepsis/invasive infection → 0.3=cellulitis/purulent exudate → 0.5=significant periwound erythema → 0.7=mild erythema → 0.9=minimal → 1.0=none.
-M (Moisture): 0.0=desiccated eschar or heavily exudative → 0.3=imbalanced → 0.5=moderately excessive → 0.7=nearly balanced → 0.9=optimal → 1.0=perfect.
-E (Edge/Re-epithelialization): 0.0=no advancement/graft failure → 0.3=scattered epithelial islands → 0.5=partial re-epithelialization from edges → 0.7=confluent epithelial coverage → 0.9=near-complete closure → 1.0=fully closed.
-
-Respond with JSON only:
-{"tissue":{"type":"what you observe","score":0.00},"inflammation":{"type":"what you observe","score":0.00},"moisture":{"type":"what you observe","score":0.00},"edge":{"type":"what you observe","score":0.00}}"""
+BURN_CLASSIFICATION_PROMPT = (
+    "Classify this burn wound using the TIME framework. "
+    "Score T/I/M/E from 0.0 (worst) to 1.0 (best). "
+    "For each dimension include a brief clinical observation. "
+    "Respond with JSON only."
+)
 
 
 def _is_burn(wound_type: str | None) -> bool:
@@ -106,7 +94,7 @@ def _build_report_prompt(
     if contradiction.get("contradiction"):
         parts.append(f"\n## Contradiction detected\n{contradiction.get('detail', 'N/A')}")
     parts.append(
-        '\nRespond with this exact JSON structure:\n'
+        '\nRespond in English only. Respond with this exact JSON structure:\n'
         '{"summary": "2-3 sentence clinical summary of wound status",'
         ' "wound_status": "current wound status description",'
         ' "change_analysis": "change since last visit or baseline note",'
@@ -288,6 +276,48 @@ def _extract_json_block(text: str) -> str:
     return _repair_json_string(text.strip())
 
 
+def _score_to_clinical_description(dim: str, score: float) -> str:
+    """Generate a clinically meaningful description based on TIME dimension and score.
+
+    Score is expected in [0, 1] range where 0 = worst, 1 = best (healed).
+    """
+    descriptions: dict[str, list[tuple[float, str]]] = {
+        "tissue": [
+            (0.2, "Necrotic with slough"),
+            (0.4, "Partial slough present"),
+            (0.6, "Mixed granulation"),
+            (0.8, "Healthy granulation"),
+            (1.0, "Epithelialized tissue"),
+        ],
+        "inflammation": [
+            (0.2, "Severe erythema/edema"),
+            (0.4, "Moderate erythema"),
+            (0.6, "Mild inflammation"),
+            (0.8, "Minimal inflammation"),
+            (1.0, "No inflammation"),
+        ],
+        "moisture": [
+            (0.2, "Excessive exudate"),
+            (0.4, "High exudate levels"),
+            (0.6, "Moderate exudate"),
+            (0.8, "Adequate moisture"),
+            (1.0, "Optimal moisture"),
+        ],
+        "edge": [
+            (0.2, "No edge advancement"),
+            (0.4, "Minimal edge migration"),
+            (0.6, "Slow edge advancement"),
+            (0.8, "Active edge migration"),
+            (1.0, "Full re-epithelialization"),
+        ],
+    }
+    thresholds = descriptions.get(dim, descriptions["tissue"])
+    for threshold, desc in thresholds:
+        if score <= threshold:
+            return desc
+    return thresholds[-1][1]
+
+
 def _normalize_time_scores(data: dict[str, Any]) -> dict[str, Any] | None:
     """Normalize a parsed JSON dict into canonical TIME format.
 
@@ -375,6 +405,12 @@ def _normalize_time_scores(data: dict[str, Any]) -> dict[str, Any] | None:
             result[dim]["score"] = round(s / 100.0, 2)
         else:
             return None
+
+    # Replace generic "observed" descriptions with clinical descriptions
+    for dim in dims:
+        desc = result[dim]["type"]
+        if desc.lower() in ("observed", "observation", "present", "noted", "seen", "n/a", ""):
+            result[dim]["type"] = _score_to_clinical_description(dim, result[dim]["score"])
 
     return result
 
@@ -783,6 +819,54 @@ class MedGemmaWrapper:
         generated = output_ids[0][inputs["input_ids"].shape[1]:]
         return self._processor.decode(generated, skip_special_tokens=True).strip()
 
+    # ---- Base model inference (LoRA disabled) --------------------------------
+
+    def _generate_base(self, image: Image.Image, prompt: str, max_new_tokens: int = 256) -> str:
+        """Run inference with LoRA adapters disabled (base MedGemma)."""
+        if not self._has_lora:
+            return self._generate(image, prompt, max_new_tokens=max_new_tokens)
+        self._model.disable_adapter_layers()
+        try:
+            return self._generate(image, prompt, max_new_tokens=max_new_tokens)
+        finally:
+            self._model.enable_adapter_layers()
+
+    def _describe_time_dimensions(
+        self, image: Image.Image, scores: dict[str, Any],
+    ) -> dict[str, str]:
+        """Ask the base model (no LoRA) to describe each TIME dimension.
+
+        Passes LoRA scores so descriptions are coherent with the scoring.
+        Returns a dict like {"tissue": "Slough with necrosis", ...}.
+        Falls back to empty dict on failure.
+        """
+        t = scores["tissue"]["score"]
+        i = scores["inflammation"]["score"]
+        m = scores["moisture"]["score"]
+        e = scores["edge"]["score"]
+        prompt = (
+            f"This wound was scored: Tissue {t}/1, Inflammation {i}/1, "
+            f"Moisture {m}/1, Edge {e}/1 (0=worst, 1=healed). "
+            "Describe each dimension in exactly 2-4 words. "
+            "Examples: \"Slough with necrosis\", \"Mild perilesional erythema\", \"Moderate serous exudate\", \"Rolled wound edges\".\n"
+            'JSON only: {"tissue": "...", "inflammation": "...", "moisture": "...", "edge": "..."}'
+        )
+        try:
+            raw = self._generate_base(image, prompt, max_new_tokens=200)
+            logger.info("TIME descriptions (base model, first 300 chars): %.300s", raw)
+            block = _extract_json_block(raw)
+            data = json.loads(block)
+            result: dict[str, str] = {}
+            for dim in ("tissue", "inflammation", "moisture", "edge"):
+                for k, v in data.items():
+                    if k.lower().strip().startswith(dim[:4]) and isinstance(v, str) and len(v) > 2:
+                        result[dim] = v
+                        break
+            return result
+        except Exception as exc:
+            logger.warning("_describe_time_dimensions failed: %s", exc)
+            return {}
+
     # ---- TIME classification ------------------------------------------------
 
     def classify_time(
@@ -792,6 +876,7 @@ class MedGemmaWrapper:
 
         Tries up to 3 times with progressively stricter prompts.
         Uses burn-specific prompt and labels when wound_type contains "burn".
+        After scoring, enriches descriptions using the base model (LoRA disabled).
         """
         if self.mock:
             seed = image_path or getattr(image, "filename", None)
@@ -802,17 +887,12 @@ class MedGemmaWrapper:
         # Progressively stricter prompt suffixes
         suffixes = [
             "",
-            "\nIMPORTANT: Respond with valid JSON only. No explanation, no markdown.",
-            (
-                "\nYou MUST respond with ONLY a JSON object, nothing else. "
-                'Example: {"tissue":{"type":"granulation","score":0.6},'
-                '"inflammation":{"type":"mild erythema","score":0.7},'
-                '"moisture":{"type":"balanced","score":0.8},'
-                '"edge":{"type":"advancing","score":0.5}}'
-            ),
+            " IMPORTANT: Respond with valid JSON only. No explanation, no markdown.",
+            " You MUST respond with ONLY a JSON object. No other text.",
         ]
         max_retries = len(suffixes)
         last_error: Exception | None = None
+        scores: dict[str, Any] | None = None
 
         for attempt in range(max_retries):
             prompt = base_prompt + suffixes[attempt]
@@ -822,14 +902,30 @@ class MedGemmaWrapper:
                 attempt + 1, max_retries, text,
             )
             try:
-                return parse_time_json(text)
+                scores = parse_time_json(text)
+                break
             except ValueError as exc:
                 last_error = exc
                 logger.warning(
                     "classify_time parse failed (attempt %d/%d): %s",
                     attempt + 1, max_retries, exc,
                 )
-        raise last_error  # type: ignore[misc]
+
+        if scores is None:
+            raise last_error  # type: ignore[misc]
+
+        # Enrich with base model descriptions if types are from fallback
+        needs_description = any(
+            scores[dim]["type"] == _score_to_clinical_description(dim, scores[dim]["score"])
+            for dim in ("tissue", "inflammation", "moisture", "edge")
+        )
+        if needs_description and self._has_lora:
+            descriptions = self._describe_time_dimensions(image, scores)
+            for dim in ("tissue", "inflammation", "moisture", "edge"):
+                if dim in descriptions:
+                    scores[dim]["type"] = descriptions[dim]
+
+        return scores
 
     # ---- Report generation --------------------------------------------------
 
@@ -864,7 +960,7 @@ class MedGemmaWrapper:
             wound_location=wound_location,
             visit_date=visit_date,
         )
-        raw_text = self._generate(image, prompt, max_new_tokens=1500)
+        raw_text = self._generate(image, prompt, max_new_tokens=800)
         logger.info("Report raw output (first 500 chars): %.500s", raw_text)
 
         # Try to parse as JSON and convert to standardized markdown
@@ -878,28 +974,15 @@ class MedGemmaWrapper:
                 visit_date=visit_date,
             )
 
-        # Fallback: if model returned something useful but not in our JSON format,
-        # wrap it in a basic report structure
-        logger.warning("Report JSON parse failed, constructing fallback report.")
-        clean_text = _strip_thinking(raw_text)
-        if not clean_text or len(clean_text) < 20:
-            # Model returned garbage — use the mock report as fallback
-            return _mock_report(
-                time_scores, trajectory,
-                patient_name=patient_name,
-                wound_type=wound_type,
-                wound_location=wound_location,
-                visit_date=visit_date,
-            )
-        # Return the cleaned model text wrapped in a report header
-        avg = sum(d["score"] for d in time_scores.values()) / 4
-        return (
-            f"## Wound Assessment Report\n\n"
-            f"**Patient:** {patient_name or 'Not recorded'}\n"
-            f"**Wound type:** {wound_type or 'Not specified'}\n"
-            f"**Trajectory:** {trajectory}\n"
-            f"**Composite score:** {max(1, min(10, round(avg * 10)))}/10\n\n"
-            f"### AI Analysis\n\n{clean_text}\n"
+        # Fallback: model output was not valid report JSON.
+        # Always use the structured mock report to guarantee clean display.
+        logger.warning("Report JSON parse failed, using structured fallback report.")
+        return _mock_report(
+            time_scores, trajectory,
+            patient_name=patient_name,
+            wound_type=wound_type,
+            wound_location=wound_location,
+            visit_date=visit_date,
         )
 
     # ---- Contradiction detection --------------------------------------------

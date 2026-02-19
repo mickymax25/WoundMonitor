@@ -14,7 +14,6 @@ import {
   Phone,
   Info,
   ShieldAlert,
-  Heart,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -591,17 +590,13 @@ function AppInfoSection() {
       <div className="p-4 space-y-4">
         {/* App identity */}
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-primary/15 flex items-center justify-center ring-1 ring-primary/20">
-            <Heart className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <p className="text-[15px] font-bold text-foreground tracking-tight leading-tight">
-              Wound Monitor
-            </p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              AI-Powered Wound Assessment
-            </p>
-          </div>
+          <img
+            src="/LogoWM_V2.png"
+            alt="Wound Monitor"
+            height={44}
+            width={190}
+            className="h-11 w-auto"
+          />
           <div className="ml-auto">
             <span className="text-[11px] font-medium text-muted-foreground bg-[var(--surface-2)] px-2.5 py-1 rounded-full ring-1 ring-border">
               v1.0.0

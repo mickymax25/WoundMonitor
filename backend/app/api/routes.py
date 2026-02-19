@@ -143,6 +143,7 @@ def _assessment_to_response(a: dict[str, Any]) -> AssessmentResponse:
         report_text=a.get("report_text"),
         alert_level=a.get("alert_level"),
         alert_detail=a.get("alert_detail"),
+        healing_comment=a.get("healing_comment"),
         created_at=a["created_at"],
     )
 
@@ -305,6 +306,7 @@ def analyze_assessment(assessment_id: str) -> AnalysisResult:
         report_text=result.get("report_text", ""),
         alert_level=result.get("alert_level", "green"),
         alert_detail=result.get("alert_detail"),
+        healing_comment=result.get("healing_comment"),
     )
 
 

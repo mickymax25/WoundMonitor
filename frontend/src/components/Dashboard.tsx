@@ -5,7 +5,6 @@ import {
   Users,
   Stethoscope,
   Activity,
-  Heart,
   RefreshCw,
   AlertCircle,
   ChevronRight,
@@ -1062,13 +1061,14 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
       {/* Header -- dark surface */}
       <header className="shrink-0 bg-[var(--surface-1)] border-b border-border/50">
         <div className="flex items-center justify-between px-4 h-12">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center ring-1 ring-primary/20">
-              <Heart className="h-3.5 w-3.5 text-primary" />
-            </div>
-            <h1 className="text-base font-bold text-foreground leading-tight tracking-tight">
-              Wound Monitor
-            </h1>
+          <div className="flex items-center">
+            <img
+              src="/LogoWM_V2.png"
+              alt="Wound Monitor"
+              height={32}
+              width={140}
+              className="h-8 w-auto"
+            />
           </div>
 
           <div className="hidden md:flex items-center gap-3">

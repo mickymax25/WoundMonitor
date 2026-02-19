@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  Heart,
   Mail,
   Lock,
   User,
@@ -250,13 +249,13 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
   return (
     <div className="fixed inset-0 flex flex-col items-center justify-center px-6">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 mb-8 animate-fade-in-up">
-        <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center ring-1 ring-primary/25">
-          <Heart className="h-4.5 w-4.5 text-primary" />
-        </div>
-        <span className="text-lg font-bold text-foreground tracking-tight">
-          Wound Monitor
-        </span>
+      <div className="flex items-center mb-8 animate-fade-in-up">
+        <img
+          src="/LogoWM_V2.png"
+          alt="Wound Monitor"
+          width={200}
+          height={80}
+        />
       </div>
 
       {/* Card */}
