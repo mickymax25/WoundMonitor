@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   Bot,
   Send,
+  MessageCircle,
 } from "lucide-react";
 import { TimeScoreCard } from "@/components/TimeScoreCard";
 import { ReferralDialog } from "@/components/ReferralDialog";
@@ -255,6 +256,7 @@ function CollapsibleSection({
 interface ParsedReport {
   observations: { label: string; text: string }[];
   recommendations: string[];
+  clinicalGuidance: { question: string; answer: string }[];
   remainingText: string;
 }
 
@@ -262,12 +264,52 @@ function parseReportText(reportText: string): ParsedReport {
   const lines = reportText.split("\n");
   const observations: { label: string; text: string }[] = [];
   const recommendations: string[] = [];
+  const clinicalGuidance: { question: string; answer: string }[] = [];
   const remainingLines: string[] = [];
 
   let inRecommendations = false;
+  let inGuidance = false;
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
+
+    // Detect Clinical Guidance header
+    if (/^#{1,4}\s+Clinical\s+Guidance/i.test(line)) {
+      inGuidance = true;
+      inRecommendations = false;
+      continue;
+    }
+
+    // If in guidance section, parse Q&A bullets
+    if (inGuidance) {
+      // Exit guidance on next section header
+      const isSectionHeader =
+        /^#{1,4}\s+/.test(line) ||
+        /^\d+\.\s+\*\*.+\*\*[:\s]*$/.test(line);
+      if (isSectionHeader) {
+        inGuidance = false;
+        // fall through to normal parsing
+      } else {
+        // Parse "- Q: ... — A: ..." or "- Q: ... - A: ..."
+        const qaMatch = line.match(/^[-*]\s+Q:\s*(.+?)\s*[—–-]+\s*A:\s*(.+)/i);
+        if (qaMatch) {
+          clinicalGuidance.push({
+            question: cleanInline(qaMatch[1].replace(/\?$/, "").trim()),
+            answer: cleanInline(qaMatch[2]),
+          });
+          continue;
+        }
+        // Skip subtitle like "*Answers to nurse questions...*"
+        if (/^\*.*\*$/.test(line) || line === "") continue;
+        // Generic bullet in guidance
+        const bullet = line.match(/^[-*]\s+(.*)/);
+        if (bullet) {
+          clinicalGuidance.push({ question: "", answer: cleanInline(bullet[1]) });
+          continue;
+        }
+        continue;
+      }
+    }
 
     const recHeaderPatterns = [
       /recommended\s+interventions/i,
@@ -343,6 +385,7 @@ function parseReportText(reportText: string): ParsedReport {
   return {
     observations,
     recommendations,
+    clinicalGuidance,
     remainingText: remainingLines.join("\n").trim(),
   };
 }
@@ -635,7 +678,7 @@ export function ReportPanel({
           {/* Alert detail + referral — inline, compact */}
           {result.alert_level !== "green" && (
             <div className="mt-3 pt-3 border-t border-border/20 space-y-3">
-              {result.alert_detail && (
+              {result.alert_detail && !result.alert_detail.includes("Contradiction") && (
                 <p className="text-[12px] text-muted-foreground/80 leading-snug">
                   {result.alert_detail}
                 </p>
@@ -693,6 +736,45 @@ export function ReportPanel({
       {renderBeforeSummary}
 
       {/* Clinical Summary removed — redundant with TIME scores + patient header */}
+
+      {/* Clinical Guidance (Nurse Q&A) — shown before recommendations */}
+      {parsed && parsed.clinicalGuidance.length > 0 && (
+        <CollapsibleSection
+          title="Clinical Guidance"
+          icon={<MessageCircle className="h-4 w-4" />}
+          defaultOpen
+        >
+          <div className="space-y-3 pt-3">
+            <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-medium">
+              Answers based on wound assessment
+            </p>
+            {parsed.clinicalGuidance.map((qa, i) => (
+              <div
+                key={i}
+                className="rounded-xl overflow-hidden ring-1 ring-rose-500/15"
+              >
+                {qa.question && (
+                  <div className="px-4 py-2.5 bg-rose-500/10 border-b border-rose-500/10">
+                    <p className="text-[13px] font-semibold text-rose-400 flex items-start gap-2">
+                      <span className="shrink-0 text-rose-400/60">Q</span>
+                      <span>{qa.question}?</span>
+                    </p>
+                  </div>
+                )}
+                <div className="px-4 py-3">
+                  <p className="text-[13px] text-foreground/75 leading-[1.7] tracking-[0.01em]">
+                    {qa.answer.split('. ').reduce<React.ReactNode[]>((acc, sentence, si, arr) => {
+                      if (si > 0) acc.push(<span key={`br-${si}`} className="inline-block w-full h-1.5" />);
+                      acc.push(<span key={`s-${si}`}>{sentence}{si < arr.length - 1 ? '.' : ''}</span>);
+                      return acc;
+                    }, [])}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CollapsibleSection>
+      )}
 
       {/* Recommendations */}
       {parsed && parsed.recommendations.length > 0 && (

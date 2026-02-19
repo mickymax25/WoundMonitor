@@ -297,6 +297,26 @@
   opacity: 0;
 }
 
+/* Screen enter transition */
+@keyframes screen-enter {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-screen-enter {
+  animation: screen-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  opacity: 0;
+}
+
+/* Tab content transition */
+@keyframes tab-enter {
+  from { opacity: 0; transform: translateX(8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-tab-enter {
+  animation: tab-enter 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  opacity: 0;
+}
+
 /* Subtle breathing glow for live indicators */
 @keyframes breathe {
   0%, 100% { opacity: 0.5; }

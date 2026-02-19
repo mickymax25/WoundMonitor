@@ -175,6 +175,7 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
             report_text: latest.report_text ?? "",
             alert_level: latest.alert_level ?? "green",
             alert_detail: latest.alert_detail ?? null,
+            healing_comment: latest.healing_comment ?? null,
           });
         }
       } catch {
@@ -218,6 +219,7 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
             report_text: latest.report_text ?? "",
             alert_level: latest.alert_level ?? "green",
             alert_detail: latest.alert_detail ?? null,
+            healing_comment: latest.healing_comment ?? null,
           });
         }
       } catch {
@@ -254,6 +256,7 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
         report_text: a.report_text ?? "",
         alert_level: a.alert_level ?? "green",
         alert_detail: a.alert_detail ?? null,
+        healing_comment: a.healing_comment ?? null,
       });
     },
     []
@@ -1191,9 +1194,9 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
       <div className="flex md:hidden flex-1 min-h-0 flex-col">
         {/* Tab content area */}
         <div className="flex-1 min-h-0 overflow-hidden">
-          {activeTab === "patients" && <MobilePatientsTab />}
-          {activeTab === "reports" && <MobileReportTab />}
-          {activeTab === "settings" && <MobileSettingsTab />}
+          {activeTab === "patients" && <div key="tab-patients" className="animate-tab-enter h-full"><MobilePatientsTab /></div>}
+          {activeTab === "reports" && <div key="tab-reports" className="animate-tab-enter h-full"><MobileReportTab /></div>}
+          {activeTab === "settings" && <div key="tab-settings" className="animate-tab-enter h-full"><MobileSettingsTab /></div>}
         </div>
 
         {/* Bottom tab bar */}

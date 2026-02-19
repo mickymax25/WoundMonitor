@@ -108,12 +108,24 @@ export default function Page() {
   }
 
   if (screen === "onboarding") {
-    return <OnboardingScreen onComplete={handleOnboardingComplete} />;
+    return (
+      <div key="onboarding" className="animate-screen-enter">
+        <OnboardingScreen onComplete={handleOnboardingComplete} />
+      </div>
+    );
   }
 
   if (screen === "auth") {
-    return <AuthScreen onAuth={handleAuth} />;
+    return (
+      <div key="auth" className="animate-screen-enter">
+        <AuthScreen onAuth={handleAuth} />
+      </div>
+    );
   }
 
-  return <Dashboard onSignOut={handleSignOut} />;
+  return (
+    <div key="app" className="animate-screen-enter h-full">
+      <Dashboard onSignOut={handleSignOut} />
+    </div>
+  );
 }

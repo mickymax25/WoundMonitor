@@ -171,10 +171,10 @@ function InlineAudioRecorder({
       onClick={startRecording}
       disabled={disabled}
       className={cn(
-        "flex items-center gap-2 h-10 px-3.5 rounded-xl text-[12px] font-semibold transition-colors",
+        "flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-semibold transition-colors ring-1",
         hasRecording
-          ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20"
-          : "bg-white/[0.06] text-foreground/70 ring-1 ring-white/[0.12] active:bg-white/[0.10]",
+          ? "bg-emerald-500/15 text-emerald-400 ring-emerald-500/20"
+          : "bg-white/[0.06] text-muted-foreground/60 ring-white/[0.10] active:bg-white/[0.10]",
         "disabled:opacity-30"
       )}
     >
@@ -415,29 +415,29 @@ export function AssessmentPanel({
           </div>
         )}
 
-        {/* ── Notes row: voice + text ── */}
-        <div className="space-y-2.5">
-          <div className="flex items-center gap-2">
+        {/* ── Nurse Input ── */}
+        <div className="rounded-xl ring-1 ring-white/[0.10] bg-white/[0.03] overflow-hidden">
+          <textarea
+            value={textNotes}
+            onChange={(e) => setTextNotes(e.target.value)}
+            disabled={isProcessing}
+            placeholder={"Notes or questions for the AI...\ne.g. Should I switch to a foam dressing?"}
+            rows={3}
+            className="w-full px-3.5 pt-3 pb-1 bg-transparent
+                       text-[13px] text-foreground placeholder:text-muted-foreground/40
+                       focus:outline-none
+                       disabled:opacity-30 resize-none leading-relaxed"
+          />
+          <div className="flex items-center justify-between px-3 pb-2.5">
             <InlineAudioRecorder
               onRecordingComplete={(blob) => setAudioBlob(blob)}
               hasRecording={audioBlob !== null}
               disabled={isProcessing}
             />
-            {audioBlob && (
-              <span className="text-[10px] text-emerald-400/70 font-medium">Recorded</span>
-            )}
+            <span className="text-[10px] text-muted-foreground/30">
+              Ask a question to get Clinical Guidance
+            </span>
           </div>
-          <textarea
-            value={textNotes}
-            onChange={(e) => setTextNotes(e.target.value)}
-            disabled={isProcessing}
-            placeholder="Clinical notes (optional)..."
-            rows={2}
-            className="w-full rounded-xl bg-white/[0.04] ring-1 ring-white/[0.10] px-3.5 py-2.5
-                       text-[13px] text-foreground placeholder:text-muted-foreground/50
-                       focus:outline-none focus:ring-2 focus:ring-primary/40 focus:bg-white/[0.06]
-                       disabled:opacity-30 resize-none leading-relaxed"
-          />
         </div>
 
         {/* ── Analyze CTA ── */}
