@@ -263,7 +263,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
       </div>
 
       {/* Card */}
-      <div className="w-full max-w-sm apple-card p-5 animate-slide-up">
+      <div className="w-full max-w-sm apple-card p-5">
         {/* Tab toggle */}
         <div className="flex rounded-xl bg-white/[0.04] p-1 mb-5">
           {(["login", "signup"] as AuthMode[]).map((m) => (
@@ -535,14 +535,13 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
           }
           onAuth();
         }}
-        className="mt-5 text-[12px] text-primary/70 hover:text-primary font-medium underline underline-offset-2 animate-slide-up"
-        style={{ animationDelay: "200ms" }}
+        className="mt-5 text-[12px] text-primary/70 hover:text-primary font-medium underline underline-offset-2"
       >
         Demo Login
       </button>
 
       {/* Toggle link */}
-      <p className="text-[12px] text-muted-foreground mt-3 animate-slide-up" style={{ animationDelay: "300ms" }}>
+      <p className="text-[12px] text-muted-foreground mt-3">
         {mode === "login" ? (
           <>
             Don&apos;t have an account?{" "}

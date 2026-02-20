@@ -100,23 +100,15 @@ export default function Page() {
   }
 
   if (screen === "onboarding") {
-    return (
-      <div key="onboarding" className="ios-enter">
-        <OnboardingScreen onComplete={handleOnboardingComplete} />
-      </div>
-    );
+    return <OnboardingScreen onComplete={handleOnboardingComplete} />;
   }
 
   if (screen === "auth") {
-    return (
-      <div key="auth" className="ios-enter">
-        <AuthScreen onAuth={handleAuth} />
-      </div>
-    );
+    return <AuthScreen onAuth={handleAuth} />;
   }
 
   return (
-    <div key="app" className="ios-enter h-full">
+    <div className="h-full">
       <Dashboard onSignOut={handleSignOut} />
     </div>
   );

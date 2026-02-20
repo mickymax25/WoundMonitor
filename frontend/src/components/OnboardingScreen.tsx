@@ -39,7 +39,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   };
 
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center px-8">
+    <div className="fixed inset-0 overflow-y-auto px-8">
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center py-12">
       {/* Logo + Motto */}
       <div className="flex flex-col items-center">
         <img
@@ -103,6 +104,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       >
         Powered by MedGemma + MedSigLIP + MedASR
       </p>
+      </div>
     </div>
   );
 }
