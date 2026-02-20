@@ -43,7 +43,7 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
-      <body className={`${inter.variable} font-sans antialiased`} style={{ backgroundColor: "#161d30" }} suppressHydrationWarning>
+      <body className={`${inter.variable} font-sans antialiased wc-hero`} suppressHydrationWarning>
         {children}
         <SwRegister />
       </body>

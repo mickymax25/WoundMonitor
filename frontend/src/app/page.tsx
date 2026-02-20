@@ -36,10 +36,9 @@ export default function Page() {
   const [splashFading, setSplashFading] = useState(false);
 
   useEffect(() => {
-    // Resolve target screen immediately but stay on splash
     const target = resolveScreen();
 
-    // If user is already logged in, skip splash entirely
+    // If already logged in, skip splash
     if (target === "app") {
       setScreen("app");
       return;
@@ -82,25 +81,18 @@ export default function Page() {
     return (
       <div
         className={`fixed inset-0 flex items-center justify-center transition-opacity duration-[600ms] ease-out ${
-          splashFading ? "opacity-0 scale-[1.02]" : "opacity-100 scale-100"
+          splashFading ? "opacity-0" : "opacity-100"
         }`}
-        style={{ transitionProperty: "opacity, transform" }}
+        style={{ transitionProperty: "opacity" }}
       >
-        {/* Ambient glow */}
-        <div className="absolute w-80 h-80 rounded-full bg-blue-500/[0.08] blur-[80px] splash-glow" />
-        <div className="absolute w-48 h-48 rounded-full bg-violet-500/[0.06] blur-[60px] splash-glow" style={{ animationDelay: "200ms" }} />
-
-        {/* Logo + App name */}
-        <div className="relative flex flex-col items-center gap-3 splash-logo">
+        <div className="flex flex-col items-center gap-4 splash-logo">
           <img
-            src="/LogoWM_V2.png"
+            src="/LogoWM_V2_cropped.png"
             alt="Wound Monitor"
-            width={360}
-            height={150}
-            className="drop-shadow-[0_0_60px_rgba(59,130,246,0.3)]"
+            className="h-20 w-auto"
           />
-          <p className="text-[11px] text-muted-foreground/60 tracking-wide uppercase splash-text">
-            AI-Powered Assessment
+          <p className="text-[15px] font-medium text-muted-foreground/70 tracking-[0.2em] uppercase splash-text">
+            Never miss a sign.
           </p>
         </div>
       </div>
@@ -108,23 +100,15 @@ export default function Page() {
   }
 
   if (screen === "onboarding") {
-    return (
-      <div key="onboarding" className="animate-screen-enter">
-        <OnboardingScreen onComplete={handleOnboardingComplete} />
-      </div>
-    );
+    return <OnboardingScreen onComplete={handleOnboardingComplete} />;
   }
 
   if (screen === "auth") {
-    return (
-      <div key="auth" className="animate-screen-enter">
-        <AuthScreen onAuth={handleAuth} />
-      </div>
-    );
+    return <AuthScreen onAuth={handleAuth} />;
   }
 
   return (
-    <div key="app" className="animate-screen-enter h-full">
+    <div key="app" className="h-full">
       <Dashboard onSignOut={handleSignOut} />
     </div>
   );

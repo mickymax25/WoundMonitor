@@ -297,6 +297,36 @@
   opacity: 0;
 }
 
+/* Onboarding — logo scales up with soft fade */
+@keyframes onboard-logo-in {
+  0%   { opacity: 0; transform: scale(0.75); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.onboard-logo {
+  animation: onboard-logo-in 2.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+/* Onboarding — motto fades in after logo */
+@keyframes onboard-motto-in {
+  0%   { opacity: 0; letter-spacing: 0.35em; }
+  100% { opacity: 1; letter-spacing: 0.12em; }
+}
+.onboard-motto {
+  animation: onboard-motto-in 1.5s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards;
+  opacity: 0;
+}
+
+/* Onboarding — feature cards slide up staggered */
+@keyframes onboard-feature-in {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.onboard-feature {
+  animation: onboard-feature-in 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
 /* Screen enter transition */
 @keyframes screen-enter {
   from { opacity: 0; transform: translateY(12px) scale(0.98); }
@@ -307,14 +337,13 @@
   opacity: 0;
 }
 
-/* Tab content transition */
+/* Tab content transition — simple fast fade, no transform */
 @keyframes tab-enter {
-  from { opacity: 0; transform: translateX(8px); }
-  to { opacity: 1; transform: translateX(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 .animate-tab-enter {
-  animation: tab-enter 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  opacity: 0;
+  animation: tab-enter 0.15s ease-out forwards;
 }
 
 /* Subtle breathing glow for live indicators */
@@ -338,34 +367,21 @@
 
 /* Splash screen logo animation */
 @keyframes splash-enter {
-  0% {
-    opacity: 0;
-    transform: scale(0.5);
-    filter: blur(12px);
-  }
-  60% {
-    opacity: 1;
-    transform: scale(1.04);
-    filter: blur(0px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-    filter: blur(0px);
-  }
+  0%   { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
 }
 .splash-logo {
-  animation: splash-enter 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: splash-enter 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Splash text fade in after logo */
+/* Splash text fade in with logo */
 @keyframes splash-text-enter {
-  0% { opacity: 0; transform: translateY(8px); }
-  100% { opacity: 1; transform: translateY(0); }
+  0% { opacity: 0; letter-spacing: 0.35em; }
+  100% { opacity: 1; letter-spacing: 0.2em; }
 }
 .splash-text {
   opacity: 0;
-  animation: splash-text-enter 0.6s ease-out 0.8s forwards;
+  animation: splash-text-enter 1s ease-out 0.3s forwards;
 }
 
 /* Splash glow pulse */

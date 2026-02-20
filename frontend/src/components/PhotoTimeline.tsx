@@ -156,28 +156,28 @@ function GalleryModal({
   const current = assessments[activeIndex];
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/90 backdrop-blur-md" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
-      {/* Header */}
-      <div className="shrink-0 flex items-center justify-between px-4 pt-2 pb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-[13px] font-semibold text-white/90">
-            {formatDate(current?.visit_date ?? "")}
-          </span>
-          <span className="text-[11px] text-white/40 tabular-nums">
-            {activeIndex + 1} / {assessments.length}
-          </span>
+    <div className="fixed inset-0 z-50 flex flex-col backdrop-blur-xl wc-hero" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+      {/* Photo area with overlaid header */}
+      <div className="relative flex-1 min-h-0">
+        {/* Overlay header — sits on top of photo area */}
+        <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 pt-2 pb-6"
+             style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, transparent 100%)" }}>
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-semibold text-white/90">
+              {formatDate(current?.visit_date ?? "")}
+            </span>
+            <span className="text-[11px] text-white/40 tabular-nums">
+              {activeIndex + 1} / {assessments.length}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-10 h-10 rounded-full bg-black/30 text-white flex items-center justify-center active:bg-black/50 transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="w-10 h-10 rounded-full bg-white/15 text-white flex items-center justify-center active:bg-white/25 transition-colors"
-        >
-          <X className="h-5 w-5" />
-        </button>
-      </div>
-
-      {/* Scrollable photo slides — capped so info panel stays visible */}
-      <div className="relative" style={{ flex: "1 1 0%", maxHeight: "calc(100vh - 250px)", minHeight: 0 }}>
         <div
           ref={scrollRef}
           onScroll={handleScroll}
@@ -189,7 +189,7 @@ function GalleryModal({
             return (
               <div
                 key={a.id}
-                className="w-full h-full shrink-0 snap-center flex items-center justify-center px-4"
+                className="w-full h-full shrink-0 snap-center flex items-center justify-center px-4 py-2"
                 onClick={onClose}
               >
                 <img

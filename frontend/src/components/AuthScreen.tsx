@@ -247,15 +247,19 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center px-6">
+    <div className="fixed inset-0 overflow-y-auto flex flex-col items-center px-6 pt-14 pb-8">
       {/* Logo */}
-      <div className="flex items-center mb-8 animate-fade-in-up">
+      <div className="flex flex-col items-center mb-6 shrink-0">
         <img
-          src="/LogoWM_V2.png"
+          src="/LogoWM_V2_cropped.png"
           alt="Wound Monitor"
           width={200}
-          height={80}
+          height={83}
+          className="h-14 w-auto"
         />
+        <p className="text-[11px] text-muted-foreground/50 tracking-[0.15em] uppercase mt-2">
+          Never miss a sign.
+        </p>
       </div>
 
       {/* Card */}

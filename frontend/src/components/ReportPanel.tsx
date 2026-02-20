@@ -584,7 +584,7 @@ export function ReportPanel({
   const isAlertCritical = result.alert_level === "red" || result.alert_level === "orange";
 
   return (
-    <div className="space-y-4 animate-fade-in-up">
+    <div className="space-y-4">
       {/* Compact header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">

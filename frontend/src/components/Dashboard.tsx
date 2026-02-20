@@ -323,6 +323,21 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
   }
 
   // ---------------------------------------------------------------------------
+  // Mobile: Shared Logo
+  // ---------------------------------------------------------------------------
+
+  const MobileLogo = () => (
+    <div className="md:hidden flex justify-center pt-3 pb-5 px-4">
+      <img
+        src="/LogoWM_V2_cropped.png"
+        alt="Wound Monitor"
+        height={48}
+        width={130}
+        className="h-14 w-auto"
+      />
+    </div>
+  );
+
   // Mobile: Patients Tab
   // ---------------------------------------------------------------------------
 
@@ -481,12 +496,13 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
 
     return (
       <div className="h-full flex flex-col relative wc-hero">
-        {/* ---- HEADER ZONE ---- */}
-        <div className="shrink-0 px-5 pt-3 pb-4 relative">
-          {/* Greeting */}
-          <div className="animate-slide-up" style={{ animationDelay: "0ms" }}>
+        <MobileLogo />
+        {/* ---- HEADER WIDGET ---- */}
+        <div className="shrink-0 px-4 pt-0 pb-3 relative">
+          <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.08] px-4 py-4">
+            {/* Greeting + date */}
             <div className="flex items-baseline justify-between">
-              <h2 className="text-[26px] font-bold text-foreground tracking-tight leading-none">
+              <h2 className="text-[16px] font-semibold text-foreground tracking-tight leading-none">
                 {greeting}
               </h2>
               {!loadingPatients && patients.length > 0 && (
@@ -496,49 +512,47 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
               )}
             </div>
             {!loadingPatients && patients.length > 0 && (
-              <p className="text-[13px] text-muted-foreground mt-1.5">
+              <p className="text-[12px] text-muted-foreground/70 mt-1">
                 {patients.length} patient{patients.length !== 1 ? "s" : ""} on file · {totalAssessments} assessment{totalAssessments !== 1 ? "s" : ""}
               </p>
             )}
+            {/* Metric pills */}
+            {!loadingPatients && patients.length > 0 && (
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                <div className={cn("metric-pill px-3 py-2.5 text-center", totalCritical > 0 && "glow-rose")}>
+                  <p className={cn("text-[20px] font-bold leading-none tabular-nums", totalCritical > 0 ? "text-rose-400" : "text-muted-foreground/30")}>
+                    {totalCritical}
+                  </p>
+                  <p className={cn("text-[9px] mt-1 font-semibold uppercase tracking-[0.08em]", totalCritical > 0 ? "text-rose-400/60" : "text-muted-foreground/30")}>
+                    Critical
+                  </p>
+                </div>
+                <div className={cn("metric-pill px-3 py-2.5 text-center", totalImproving > 0 && "glow-emerald")}>
+                  <p className={cn("text-[20px] font-bold leading-none tabular-nums", totalImproving > 0 ? "text-emerald-400" : "text-muted-foreground/30")}>
+                    {totalImproving}
+                  </p>
+                  <p className={cn("text-[9px] mt-1 font-semibold uppercase tracking-[0.08em]", totalImproving > 0 ? "text-emerald-400/60" : "text-muted-foreground/30")}>
+                    Healing
+                  </p>
+                </div>
+                <div className={cn("metric-pill px-3 py-2.5 text-center", totalStable > 0 && "glow-blue")}>
+                  <p className={cn("text-[20px] font-bold leading-none tabular-nums", totalStable > 0 ? "text-sky-400" : "text-muted-foreground/30")}>
+                    {totalStable}
+                  </p>
+                  <p className={cn("text-[9px] mt-1 font-semibold uppercase tracking-[0.08em]", totalStable > 0 ? "text-sky-400/60" : "text-muted-foreground/30")}>
+                    Stable
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
-
-          {/* Metric pills */}
-          {!loadingPatients && patients.length > 0 && (
-            <div className="grid grid-cols-3 gap-2 mt-4 animate-slide-up" style={{ animationDelay: "80ms" }}>
-              <div className={cn("metric-pill px-3 py-3 text-center", totalCritical > 0 && "glow-rose")}>
-                <p className={cn("text-[22px] font-bold leading-none tabular-nums", totalCritical > 0 ? "text-rose-400" : "text-muted-foreground/30")}>
-                  {totalCritical}
-                </p>
-                <p className={cn("text-[9px] mt-1 font-semibold uppercase tracking-[0.08em]", totalCritical > 0 ? "text-rose-400/60" : "text-muted-foreground/30")}>
-                  Critical
-                </p>
-              </div>
-              <div className={cn("metric-pill px-3 py-3 text-center", totalImproving > 0 && "glow-emerald")}>
-                <p className={cn("text-[22px] font-bold leading-none tabular-nums", totalImproving > 0 ? "text-emerald-400" : "text-muted-foreground/30")}>
-                  {totalImproving}
-                </p>
-                <p className={cn("text-[9px] mt-1 font-semibold uppercase tracking-[0.08em]", totalImproving > 0 ? "text-emerald-400/60" : "text-muted-foreground/30")}>
-                  Healing
-                </p>
-              </div>
-              <div className={cn("metric-pill px-3 py-3 text-center", totalStable > 0 && "glow-blue")}>
-                <p className={cn("text-[22px] font-bold leading-none tabular-nums", totalStable > 0 ? "text-sky-400" : "text-muted-foreground/30")}>
-                  {totalStable}
-                </p>
-                <p className={cn("text-[9px] mt-1 font-semibold uppercase tracking-[0.08em]", totalStable > 0 ? "text-sky-400/60" : "text-muted-foreground/30")}>
-                  Stable
-                </p>
-              </div>
-            </div>
-          )}
-
         </div>
 
         {/* ---- SCROLLABLE CONTENT ---- */}
         <div className="flex-1 overflow-y-auto px-4 pb-24">
           {/* Search + Actions — inside scroll area */}
           {!loadingPatients && patients.length > 0 && (
-            <div className="apple-card p-3 mb-4 animate-slide-up" style={{ animationDelay: "160ms" }}>
+            <div className="apple-card p-3 mb-4">
               <div className="relative">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 pointer-events-none" />
                 <input
@@ -636,7 +650,7 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
                   { icon: Activity, text: "Track healing trajectory", color: "text-emerald-400 bg-emerald-500/10 ring-emerald-500/15" },
                   { icon: Shield, text: "Clinical-grade reporting", color: "text-violet-400 bg-violet-500/10 ring-violet-500/15" },
                 ].map(({ icon: Icon, text, color }, i) => (
-                  <div key={i} className="flex items-center gap-3.5 animate-slide-up" style={{ animationDelay: `${200 + i * 80}ms` }}>
+                  <div key={i} className="flex items-center gap-3.5">
                     <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ring-1", color)}>
                       <Icon className="h-4 w-4" />
                     </div>
@@ -740,7 +754,7 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
 
     return (
       <>
-      <div className="shrink-0 px-4 pt-3 pb-1">
+      <div className="shrink-0 px-4 pt-0 pb-1">
         <div className="apple-card flex items-center gap-3 px-3.5 py-3">
           {/* Avatar */}
           <div className="relative shrink-0">
@@ -775,16 +789,6 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
-              onClick={() => { setShowShareLink(true); setLinkCopied(false); }}
-              className="h-8 w-8 flex items-center justify-center rounded-lg
-                         text-violet-400 text-[11px]
-                         bg-violet-500/10 ring-1 ring-violet-500/15 active:bg-violet-500/20 transition-colors"
-              title="Patient upload link"
-            >
-              <Link2 className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
               onClick={() => setShowAssessForm(true)}
               className="h-8 px-3 flex items-center gap-1.5 rounded-lg
                          text-primary text-[11px] font-semibold
@@ -801,6 +805,16 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
                          bg-white/[0.04] ring-1 ring-white/[0.06] active:bg-white/[0.08] transition-colors"
             >
               Change
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowShareLink(true); setLinkCopied(false); }}
+              className="h-8 w-8 flex items-center justify-center rounded-lg
+                         text-violet-400 text-[11px]
+                         bg-violet-500/10 ring-1 ring-violet-500/15 active:bg-violet-500/20 transition-colors"
+              title="Patient upload link"
+            >
+              <Link2 className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
@@ -899,7 +913,8 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
 
   function MobileReportTab() {
     return (
-      <div className="h-full flex flex-col">
+      <div className="h-full flex flex-col wc-hero">
+        <MobileLogo />
         <MobilePatientHeader />
         {selectedPatient ? (
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
@@ -991,8 +1006,11 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
 
   function MobileSettingsTab() {
     return (
-      <div className="h-full overflow-y-auto px-4 py-4">
-        <SettingsPanel onSignOut={onSignOut} />
+      <div className="h-full overflow-y-auto wc-hero">
+        <MobileLogo />
+        <div className="px-4 pb-4">
+          <SettingsPanel onSignOut={onSignOut} />
+        </div>
       </div>
     );
   }
@@ -1063,14 +1081,14 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
     <div className="h-screen flex flex-col bg-background">
       {/* Header -- dark surface */}
       <header className="shrink-0 bg-[var(--surface-1)] border-b border-border/50">
-        <div className="flex items-center justify-between px-4 h-12">
+        <div className="flex items-center justify-between px-4 h-14">
           <div className="flex items-center">
             <img
-              src="/LogoWM_V2.png"
+              src="/LogoWM_V2_cropped.png"
               alt="Wound Monitor"
-              height={32}
-              width={140}
-              className="h-8 w-auto"
+              height={44}
+              width={190}
+              className="h-11 w-auto hidden md:block"
             />
           </div>
 

@@ -40,17 +40,17 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
   return (
     <div className="fixed inset-0 flex flex-col items-center justify-center px-8">
-      {/* Logo + Title */}
-      <div className="flex flex-col items-center animate-fade-in-up">
+      {/* Logo + Motto */}
+      <div className="flex flex-col items-center">
         <img
-          src="/LogoWM_V2.png"
+          src="/LogoWM_V2_cropped.png"
           alt="Wound Monitor"
-          width={240}
-          height={100}
-          className="mb-2"
+          width={260}
+          height={108}
+          className="h-16 w-auto mb-3"
         />
-        <p className="text-sm text-muted-foreground mt-1.5">
-          AI-Powered Wound Assessment
+        <p className="text-[15px] font-medium tracking-[0.15em] text-muted-foreground/70 uppercase onboard-motto">
+          Never miss a sign.
         </p>
       </div>
 
@@ -61,8 +61,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           return (
             <div
               key={feat.title}
-              className="flex items-center gap-3.5 apple-card px-4 py-3.5 animate-slide-up"
-              style={{ animationDelay: `${200 + i * 120}ms` }}
+              className="flex items-center gap-3.5 apple-card px-4 py-3.5 onboard-feature"
+              style={{ animationDelay: `${800 + i * 200}ms` }}
             >
               <div
                 className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ring-1 ${feat.bg}`}
@@ -84,8 +84,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
       {/* Get Started */}
       <div
-        className="w-full max-w-sm mt-10 animate-slide-up"
-        style={{ animationDelay: "650ms" }}
+        className="w-full max-w-sm mt-10 onboard-feature"
+        style={{ animationDelay: "1600ms" }}
       >
         <Button
           onClick={handleGetStarted}
@@ -98,8 +98,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
       {/* Subtle footer */}
       <p
-        className="text-[10px] text-muted-foreground/40 mt-6 animate-slide-up"
-        style={{ animationDelay: "800ms" }}
+        className="text-[10px] text-muted-foreground/40 mt-6 onboard-feature"
+        style={{ animationDelay: "1900ms" }}
       >
         Powered by MedGemma + MedSigLIP + MedASR
       </p>

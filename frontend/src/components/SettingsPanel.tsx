@@ -591,7 +591,7 @@ function AppInfoSection() {
         {/* App identity */}
         <div className="flex items-center gap-3">
           <img
-            src="/LogoWM_V2.png"
+            src="/LogoWM_V2_cropped.png"
             alt="Wound Monitor"
             height={44}
             width={190}
@@ -631,30 +631,24 @@ function AppInfoSection() {
 export function SettingsPanel({ onSignOut }: { onSignOut?: () => void }) {
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="animate-slide-up" style={{ animationDelay: "0ms" }}>
-        <h2 className="text-[26px] font-bold text-foreground tracking-tight leading-none">
+      {/* Header widget — same style as Patients greeting card */}
+      <div className="rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.08] px-4 py-4">
+        <h2 className="text-[16px] font-semibold text-foreground tracking-tight leading-none">
           Settings
         </h2>
-        <p className="text-[13px] text-muted-foreground mt-1.5">
-          Profile, physicians, and app configuration
+        <p className="text-[11px] text-muted-foreground mt-1">
+          Profile, physicians &amp; app configuration
         </p>
       </div>
 
       {/* Sections */}
-      <div className="animate-slide-up" style={{ animationDelay: "60ms" }}>
-        <NurseProfileSection />
-      </div>
-      <div className="animate-slide-up" style={{ animationDelay: "120ms" }}>
-        <PhysiciansSection />
-      </div>
-      <div className="animate-slide-up" style={{ animationDelay: "180ms" }}>
-        <AppInfoSection />
-      </div>
+      <NurseProfileSection />
+      <PhysiciansSection />
+      <AppInfoSection />
 
       {/* Sign Out */}
       {onSignOut && (
-        <div className="animate-slide-up pt-2" style={{ animationDelay: "240ms" }}>
+        <div className="pt-2">
           <button
             type="button"
             onClick={onSignOut}
