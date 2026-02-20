@@ -77,10 +77,11 @@
   /* Premium mesh gradient hero */
   .wc-hero {
     background:
-      radial-gradient(ellipse 90% 50% at 10% 0%, rgba(56, 120, 255, 0.18) 0%, transparent 55%),
-      radial-gradient(ellipse 70% 45% at 90% 15%, rgba(120, 70, 230, 0.10) 0%, transparent 50%),
-      radial-gradient(ellipse 50% 40% at 50% 85%, rgba(52, 200, 180, 0.06) 0%, transparent 50%),
-      linear-gradient(175deg, hsl(226 38% 16%) 0%, hsl(228 35% 12%) 60%);
+      radial-gradient(ellipse 100% 60% at 5% 0%, rgba(56, 120, 255, 0.22) 0%, transparent 50%),
+      radial-gradient(ellipse 80% 55% at 95% 10%, rgba(120, 70, 230, 0.14) 0%, transparent 45%),
+      radial-gradient(ellipse 70% 50% at 50% 100%, rgba(52, 200, 180, 0.10) 0%, transparent 45%),
+      radial-gradient(ellipse 40% 30% at 70% 60%, rgba(100, 60, 220, 0.06) 0%, transparent 40%),
+      linear-gradient(175deg, hsl(226 40% 17%) 0%, hsl(230 36% 11%) 100%);
   }
 
   /* Noise texture overlay for depth */
@@ -328,12 +329,13 @@
 }
 
 /* Screen enter transition */
-@keyframes screen-enter {
-  from { opacity: 0; transform: translateY(12px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+/* Apple-style screen transition — soft zoom-in fade */
+@keyframes ios-screen-in {
+  0%   { opacity: 0; transform: scale(1.04); filter: blur(4px); }
+  100% { opacity: 1; transform: scale(1);    filter: blur(0px); }
 }
-.animate-screen-enter {
-  animation: screen-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+.ios-enter {
+  animation: ios-screen-in 0.5s cubic-bezier(0.32, 0.72, 0, 1) forwards;
   opacity: 0;
 }
 
