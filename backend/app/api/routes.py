@@ -23,6 +23,7 @@ from app.schemas.wound import (
     AssessmentImageResponse,
     AssessmentResponse,
     PatientCreate,
+    PatientUpdate,
     PatientReportInfo,
     PatientReportResponse,
     PatientResponse,
@@ -167,6 +168,15 @@ def list_patients() -> list[PatientResponse]:
 @router.get("/patients/{patient_id}", response_model=PatientResponse)
 def get_patient(patient_id: str) -> PatientResponse:
     patient = db.get_patient(patient_id)
+    if patient is None:
+        raise HTTPException(status_code=404, detail="Patient not found.")
+    return _patient_response(patient)
+
+
+@router.patch("/patients/{patient_id}", response_model=PatientResponse)
+def update_patient(patient_id: str, body: PatientUpdate) -> PatientResponse:
+    updates = body.model_dump(exclude_unset=True)
+    patient = db.update_patient(patient_id, updates)
     if patient is None:
         raise HTTPException(status_code=404, detail="Patient not found.")
     return _patient_response(patient)

@@ -605,6 +605,7 @@ export function ReportPanel({
           open={referralOpen}
           onClose={() => setReferralOpen(false)}
           patientName={patientName ?? "Patient"}
+          woundType={woundType}
           alertLevel={result.alert_level}
           alertDetail={result.alert_detail}
           referringPhysician={referringPhysician}

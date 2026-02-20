@@ -25,6 +25,21 @@ class PatientCreate(BaseModel):
     referring_physician_preferred_contact: str | None = None  # phone | email | whatsapp
 
 
+class PatientUpdate(BaseModel):
+    name: str | None = None
+    age: int | None = None
+    sex: str | None = None
+    phone: str | None = None
+    wound_type: str | None = None
+    wound_location: str | None = None
+    referring_physician: str | None = None
+    referring_physician_specialty: str | None = None
+    referring_physician_facility: str | None = None
+    referring_physician_phone: str | None = None
+    referring_physician_email: str | None = None
+    referring_physician_preferred_contact: str | None = None
+
+
 class PatientResponse(BaseModel):
     id: str
     name: str

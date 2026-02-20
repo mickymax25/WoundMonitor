@@ -23,6 +23,7 @@ interface ReferralDialogProps {
   open: boolean;
   onClose: () => void;
   patientName: string;
+  woundType?: string | null;
   alertLevel: string;
   alertDetail: string | null;
   referringPhysician?: string | null;
@@ -53,6 +54,7 @@ export function ReferralDialog({
   open,
   onClose,
   patientName,
+  woundType,
   alertLevel,
   alertDetail,
   referringPhysician,
@@ -73,6 +75,12 @@ export function ReferralDialog({
     alertDetail ? `Clinical alert: ${alertDetail}` : ""
   );
 
+  // Sync state when props change (e.g. patient selected after initial mount)
+  useEffect(() => {
+    setPhysicianName(referringPhysician ?? "");
+    setContact(referringPhysicianPhone ?? referringPhysicianEmail ?? "");
+  }, [referringPhysician, referringPhysicianPhone, referringPhysicianEmail]);
+
   const resetForm = useCallback(() => {
     setUrgency(alertLevel === "red" ? "emergency" : "urgent");
     setPhysicianName(referringPhysician ?? "");
@@ -86,10 +94,13 @@ export function ReferralDialog({
   }, [onClose, resetForm]);
 
   // Derived values for message building
-  const physician = physicianName.trim() || "Physician";
+  const physician = physicianName.trim() || "Doctor";
   const patient = patientName || "Patient";
   const urgencyLabel = urgency === "emergency" ? "EMERGENCY" : urgency === "urgent" ? "Urgent" : "Routine";
-  const alertInfo = notes.trim() || "Clinical review recommended";
+  const woundLabel = woundType
+    ? woundType.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+    : null;
+  const clinicalNotes = notes.trim() || "Clinical review recommended";
 
   // Resolve phone and email from the contact field + stored values
   const resolvedPhone = useMemo(() => {
@@ -104,6 +115,29 @@ export function ReferralDialog({
     return null;
   }, [contact, referringPhysicianEmail]);
 
+  // Build structured referral message
+  const buildMessage = useCallback((format: "text" | "html") => {
+    const sep = format === "html" ? "<br>" : "\n";
+    const bold = (s: string) => format === "html" ? `<b>${s}</b>` : s;
+    const lines: string[] = [];
+
+    lines.push(`${bold(`${urgencyLabel} Referral`)} — Wound Monitor`);
+    lines.push("");
+    lines.push(`Dear ${physician},`);
+    lines.push("");
+    lines.push(`I am referring ${bold(patient)} for your review.`);
+    lines.push("");
+    if (woundLabel) lines.push(`${bold("Wound type:")} ${woundLabel}`);
+    lines.push(`${bold("Urgency:")} ${urgencyLabel}`);
+    lines.push(`${bold("Findings:")} ${clinicalNotes}`);
+    lines.push("");
+    lines.push("Please review at your earliest convenience.");
+    lines.push("");
+    lines.push("— Sent via Wound Monitor");
+
+    return lines.join(sep);
+  }, [urgencyLabel, physician, patient, woundLabel, clinicalNotes]);
+
   const handleSend = useCallback(
     (channel: "phone" | "whatsapp" | "email") => {
       let url = "";
@@ -112,15 +146,11 @@ export function ReferralDialog({
         url = `tel:${clean}`;
       } else if (channel === "whatsapp" && resolvedPhone) {
         const clean = resolvedPhone.replace(/[^+\d]/g, "");
-        const text = encodeURIComponent(
-          `Wound Monitor — ${urgencyLabel} Referral\n\n${physician}, I am referring ${patient} for review.\n\n${alertInfo}`
-        );
+        const text = encodeURIComponent(buildMessage("text"));
         url = `https://wa.me/${clean}?text=${text}`;
       } else if (channel === "email" && resolvedEmail) {
-        const subject = encodeURIComponent(`Wound Monitor — ${urgencyLabel} Referral for ${patient}`);
-        const body = encodeURIComponent(
-          `Dear ${physician},\n\nI am sending a ${urgencyLabel.toLowerCase()} referral for ${patient}.\n\n${alertInfo}\n\nPlease review at your earliest convenience.\n\nBest regards`
-        );
+        const subject = encodeURIComponent(`${urgencyLabel} Referral — ${patient} — Wound Monitor`);
+        const body = encodeURIComponent(buildMessage("text"));
         url = `mailto:${resolvedEmail}?subject=${subject}&body=${body}`;
       }
       if (url) {
@@ -129,7 +159,7 @@ export function ReferralDialog({
         handleClose();
       }
     },
-    [resolvedPhone, resolvedEmail, urgencyLabel, physician, patient, alertInfo, onReferralSent, handleClose]
+    [resolvedPhone, resolvedEmail, urgencyLabel, patient, buildMessage, onReferralSent, handleClose]
   );
 
   const preferred = referringPhysicianPreferredContact;

@@ -154,6 +154,28 @@ def create_patient(data: dict[str, Any]) -> dict[str, Any]:
     return get_patient(patient_id)  # type: ignore[return-value]
 
 
+def update_patient(patient_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    """Update allowed fields on an existing patient."""
+    allowed = {
+        "name", "age", "sex", "phone", "wound_type", "wound_location",
+        "referring_physician", "referring_physician_specialty",
+        "referring_physician_facility", "referring_physician_phone",
+        "referring_physician_email", "referring_physician_preferred_contact",
+    }
+    updates = {k: v for k, v in data.items() if k in allowed}
+    if not updates:
+        return get_patient(patient_id)
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    values = list(updates.values()) + [patient_id]
+    conn = get_db()
+    try:
+        conn.execute(f"UPDATE patients SET {set_clause} WHERE id = ?", values)
+        conn.commit()
+    finally:
+        conn.close()
+    return get_patient(patient_id)
+
+
 def get_patient(patient_id: str) -> dict[str, Any] | None:
     conn = get_db()
     try:
