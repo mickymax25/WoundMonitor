@@ -78,11 +78,13 @@ const TRAJECTORY_CONFIG: Record<
 function AlertCard({
   level,
   detail,
+  secondaryDetail,
   referralSent,
   onReferralClick,
 }: {
   level: string;
   detail: string | null;
+  secondaryDetail?: string | null;
   referralSent: boolean;
   onReferralClick: () => void;
 }) {
@@ -172,6 +174,11 @@ function AlertCard({
             {detail && (
               <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">
                 {detail}
+              </p>
+            )}
+            {secondaryDetail && (
+              <p className="text-[12px] text-muted-foreground/80 mt-1.5 leading-relaxed">
+                {secondaryDetail}
               </p>
             )}
           </div>
@@ -537,32 +544,44 @@ export function ReportPanel({
   }
 
   const today = formatDate(new Date().toISOString());
+  // First visit (no change_score) → always show "Baseline" regardless of stored trajectory
+  const effectiveTrajectory =
+    result.change_score == null ? "baseline" : result.trajectory;
   const trajectoryConfig =
-    TRAJECTORY_CONFIG[result.trajectory] || TRAJECTORY_CONFIG.baseline;
+    TRAJECTORY_CONFIG[effectiveTrajectory] || TRAJECTORY_CONFIG.baseline;
 
-  // Healing score: average of 4 TIME dimensions, shown as 1-10
-  const timeScores = Object.values(result.time_classification);
-  const compositeRaw = timeScores.reduce((sum, d) => sum + d.score, 0) / timeScores.length;
-  const healingScore = Math.max(1, Math.min(10, Math.round(compositeRaw * 10)));
-  const healingPercent = Math.round(compositeRaw * 100);
+  // BWAT total score (13-65), lower = better
+  const bwatTotal = result.bwat_total ?? null;
+  const hasBwat = bwatTotal != null && bwatTotal > 0;
 
-  function healingColor(score: number): string {
-    if (score >= 7) return "text-emerald-500";
-    if (score >= 4) return "text-orange-300";
+  // Unified BWAT thresholds: 13-26 good, 27-39 moderate, 40-52 concerning, 53-65 critical
+  function bwatSeverityLabel(total: number): string {
+    if (total <= 26) return "Minimal";
+    if (total <= 39) return "Moderate";
+    if (total <= 52) return "Severe";
+    return "Critical";
+  }
+  function bwatSeverityComment(total: number): string {
+    if (total <= 26) return "Wound progressing well toward closure";
+    if (total <= 39) return "Continue current care plan, monitor progress";
+    if (total <= 52) return "Care plan review needed, consider specialist referral";
+    return "Critical wound status — immediate clinical review required";
+  }
+  function bwatColor(total: number): string {
+    if (total <= 26) return "text-emerald-400";
+    if (total <= 39) return "text-sky-400";
+    if (total <= 52) return "text-orange-300";
     return "text-rose-400";
   }
-  function healingRingColor(score: number): string {
-    if (score >= 7) return "stroke-emerald-400";
-    if (score >= 4) return "stroke-orange-300";
+  function bwatRingColor(total: number): string {
+    if (total <= 26) return "stroke-emerald-400";
+    if (total <= 39) return "stroke-sky-400";
+    if (total <= 52) return "stroke-orange-300";
     return "stroke-rose-400";
   }
-  function healingLabel(score: number): string {
-    if (score >= 8) return "Healing well — wound is progressing";
-    if (score >= 6) return "Progressing — continue current care";
-    if (score >= 4) return "Needs attention — consider care plan review";
-    if (score >= 2) return "Poor healing — intervention recommended";
-    return "Critical — urgent attention required";
-  }
+  // Ring percent: 13=fully healed (100%), 65=worst (100% filled from worst side)
+  // Invert: lower score = more of the "good" ring
+  const bwatPercent = hasBwat ? Math.round(((65 - bwatTotal!) / (65 - 13)) * 100) : 0;
 
   // Alert styling for the healing card border
   const alertBorder =
@@ -573,15 +592,20 @@ export function ReportPanel({
         : result.alert_level === "yellow"
           ? "border-orange-300/15"
           : "border-white/[0.06]";
-  const alertAccent =
-    result.alert_level === "red"
-      ? "bg-rose-500"
-      : result.alert_level === "orange"
-        ? "bg-orange-300"
-        : result.alert_level === "yellow"
-          ? "bg-orange-300"
-          : "bg-emerald-500";
+  // Accent bar color = BWAT severity (aligned thresholds)
+  const alertAccent = hasBwat
+    ? (bwatTotal! <= 26 ? "bg-emerald-500" : bwatTotal! <= 39 ? "bg-sky-400" : bwatTotal! <= 52 ? "bg-orange-300" : "bg-rose-500")
+    : (result.alert_level === "red" ? "bg-rose-500" : result.alert_level === "orange" ? "bg-orange-300" : "bg-emerald-500");
   const isAlertCritical = result.alert_level === "red" || result.alert_level === "orange";
+  const criticalModeHint =
+    (result.alert_detail ?? "").toLowerCase().includes("critical visual flag");
+  const isCriticalMode = result.critical_mode ?? criticalModeHint;
+  const criticalPrimary =
+    result.healing_comment ??
+    result.alert_detail ??
+    "Critical wound status — immediate physician review required.";
+  const criticalSecondary =
+    result.healing_comment ? result.alert_detail : null;
 
   return (
     <div className="space-y-4">
@@ -616,260 +640,336 @@ export function ReportPanel({
         />
       )}
 
-      {/* Healing Score + Trajectory + Alert — unified card */}
-      <div
-        className={cn(
-          "apple-card overflow-hidden border",
-          alertBorder,
-          result.alert_level === "red" && "animate-alert-pulse"
-        )}
-      >
-        {/* Alert accent bar */}
-        <div className={cn("h-[3px]", alertAccent)} />
+      {isCriticalMode && (
+        <AlertCard
+          level="red"
+          detail={criticalPrimary}
+          secondaryDetail={criticalSecondary}
+          referralSent={referralSent}
+          onReferralClick={handleReferral}
+        />
+      )}
 
-        <div className="p-4">
-          <div className="flex items-center gap-4">
-            {/* Circular healing gauge */}
-            <div className="relative shrink-0 w-20 h-20">
-              <svg viewBox="0 0 80 80" className="w-20 h-20 -rotate-90">
-                <circle
-                  cx="40" cy="40" r="34"
-                  fill="none"
-                  stroke="hsl(228 28% 22%)"
-                  strokeWidth="5"
-                />
-                <circle
-                  cx="40" cy="40" r="34"
-                  fill="none"
-                  className={healingRingColor(healingScore)}
-                  strokeWidth="5"
-                  strokeLinecap="round"
-                  strokeDasharray={`${2 * Math.PI * 34}`}
-                  strokeDashoffset={`${2 * Math.PI * 34 * (1 - healingPercent / 100)}`}
-                  style={{ transition: "stroke-dashoffset 1s ease-out" }}
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className={cn("text-xl font-bold tabular-nums leading-none", healingColor(healingScore))}>
-                  {healingScore}
-                </span>
-                <span className="text-[9px] text-muted-foreground/60 font-medium mt-0.5">/10</span>
+      <div className={cn(isCriticalMode && "opacity-40 grayscale pointer-events-none")}>
+        {/* Healing Score + Alert + Evolution Strip */}
+        <div
+          className={cn(
+            "apple-card overflow-hidden border",
+            alertBorder,
+            result.alert_level === "red" && "animate-alert-pulse"
+          )}
+        >
+          {/* Alert accent bar */}
+          <div className={cn("h-[3px]", alertAccent)} />
+
+          <div className="p-4">
+            <div className="flex items-center gap-4">
+              {/* Circular BWAT gauge */}
+              <div className="relative shrink-0 w-20 h-20">
+                <svg viewBox="0 0 80 80" className="w-20 h-20 -rotate-90">
+                  <circle cx="40" cy="40" r="34" fill="none" stroke="hsl(228 28% 22%)" strokeWidth="5" />
+                  {hasBwat && (
+                    <circle
+                      cx="40" cy="40" r="34" fill="none"
+                      className={bwatRingColor(bwatTotal!)}
+                      strokeWidth="5" strokeLinecap="round"
+                      strokeDasharray={`${2 * Math.PI * 34}`}
+                      strokeDashoffset={`${2 * Math.PI * 34 * (1 - bwatPercent / 100)}`}
+                      style={{ transition: "stroke-dashoffset 1s ease-out" }}
+                    />
+                  )}
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  {hasBwat ? (
+                    <>
+                      <span className={cn("text-xl font-bold tabular-nums leading-none", bwatColor(bwatTotal!))}>
+                        {bwatTotal}
+                      </span>
+                      <span className="text-[9px] text-muted-foreground/60 font-medium mt-0.5">/65</span>
+                    </>
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground/40">N/A</span>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Trajectory + description */}
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-medium mb-1">Healing Score</p>
-              <div
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold mb-1.5",
-                  trajectoryConfig.bg,
-                  trajectoryConfig.color
+              {/* Status + comment */}
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-medium mb-1">BWAT Score</p>
+                {hasBwat ? (
+                  <>
+                    <p className={cn("text-[13px] font-semibold leading-tight mb-1", bwatColor(bwatTotal!))}>
+                      {bwatSeverityLabel(bwatTotal!)}
+                    </p>
+                    <p className="text-[12px] text-muted-foreground leading-snug">
+                      {isCriticalMode
+                        ? "Critical alert above — review immediately."
+                        : result.healing_comment || bwatSeverityComment(bwatTotal!)}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[12px] text-muted-foreground leading-snug">
+                    {result.healing_comment || "BWAT scoring not available for this assessment"}
+                  </p>
                 )}
-              >
-                {trajectoryConfig.icon}
-                {trajectoryConfig.label}
               </div>
-              <p className="text-[12px] text-muted-foreground leading-snug">
-                {result.healing_comment || healingLabel(healingScore)}
-              </p>
             </div>
+
+            {/* Alert detail + referral */}
+            {!isCriticalMode && result.alert_level !== "green" && (
+              <div className="mt-3 pt-3 border-t border-border/20 space-y-3">
+                {result.alert_detail && !result.alert_detail.includes("Contradiction") && (
+                  <p className="text-[12px] text-muted-foreground/80 leading-snug">
+                    {result.alert_detail}
+                  </p>
+                )}
+                {isAlertCritical && (
+                  <>
+                    {referralSent ? (
+                      <div className="flex items-center gap-2 text-[12px] font-semibold text-emerald-400">
+                        <CheckCircle className="h-3.5 w-3.5" />
+                        Referral sent successfully
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleReferral}
+                        className={cn(
+                          "w-full flex items-center justify-center gap-2 h-10 rounded-xl",
+                          "text-[12px] font-semibold transition-colors active:opacity-80 ring-1",
+                          result.alert_level === "red"
+                            ? "bg-rose-500/15 text-rose-300 ring-rose-500/25"
+                            : "bg-orange-300/10 text-orange-300 ring-orange-300/20"
+                        )}
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        Refer to Physician
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Alert detail + referral — inline, compact */}
-          {result.alert_level !== "green" && (
-            <div className="mt-3 pt-3 border-t border-border/20 space-y-3">
-              {result.alert_detail && !result.alert_detail.includes("Contradiction") && (
-                <p className="text-[12px] text-muted-foreground/80 leading-snug">
-                  {result.alert_detail}
-                </p>
-              )}
-              {isAlertCritical && (
-                <>
-                  {referralSent ? (
-                    <div className="flex items-center gap-2 text-[12px] font-semibold text-emerald-400">
-                      <CheckCircle className="h-3.5 w-3.5" />
-                      Referral sent successfully
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleReferral}
+          {/* Evolution strip — bottom of card */}
+          {effectiveTrajectory === "baseline" ? (
+            <div className="px-4 py-2.5 bg-white/[0.03] border-t border-border/15 flex items-center gap-2">
+              <Circle className="h-3 w-3 text-muted-foreground/30 shrink-0" />
+              <span className="text-[11px] text-muted-foreground/40">Initial assessment &mdash; baseline established</span>
+            </div>
+          ) : (
+            <div className="px-4 py-3 border-t border-border/15 bg-white/[0.02]">
+              <div className="flex items-center justify-between mb-2">
+                <div className={cn("inline-flex items-center gap-1 text-[11px] font-semibold", trajectoryConfig.color)}>
+                  {trajectoryConfig.icon}
+                  {trajectoryConfig.label}
+                </div>
+                {result.previous_visit_date && (
+                  <span className="text-[10px] text-muted-foreground/35">
+                    vs {formatDate(result.previous_visit_date)}
+                  </span>
+                )}
+              </div>
+              {/* Progress bar: BWAT total */}
+              {hasBwat && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground/50 tabular-nums w-5 text-right shrink-0">
+                    {result.previous_healing_score != null && result.previous_healing_score > 10
+                      ? result.previous_healing_score
+                      : ""}
+                  </span>
+                  <div className="flex-1 h-[6px] rounded-full bg-white/[0.06] relative overflow-hidden">
+                    {/* Previous BWAT ghost */}
+                    {result.previous_healing_score != null && result.previous_healing_score > 10 && (
+                      <div
+                        className="absolute top-0 h-full rounded-full bg-white/10"
+                        style={{ width: `${((65 - result.previous_healing_score) / 52) * 100}%` }}
+                      />
+                    )}
+                    {/* Current BWAT bar — inverted: lower BWAT = more bar */}
+                    <div
                       className={cn(
-                        "w-full flex items-center justify-center gap-2 h-10 rounded-xl",
-                        "text-[12px] font-semibold transition-colors active:opacity-80 ring-1",
-                        result.alert_level === "red"
-                          ? "bg-rose-500/15 text-rose-300 ring-rose-500/25"
-                          : "bg-orange-300/10 text-orange-300 ring-orange-300/20"
+                        "absolute top-0 h-full rounded-full transition-all duration-700",
+                        bwatTotal! <= 26 ? "bg-emerald-400" :
+                        bwatTotal! <= 39 ? "bg-sky-400" :
+                        bwatTotal! <= 52 ? "bg-orange-300" :
+                        "bg-rose-400"
                       )}
-                    >
-                      <Send className="h-3.5 w-3.5" />
-                      Refer to Physician
-                    </button>
-                  )}
-                </>
+                      style={{ width: `${bwatPercent}%` }}
+                    />
+                  </div>
+                  <span className={cn("text-[10px] font-semibold tabular-nums w-5 shrink-0", bwatColor(bwatTotal!))}>
+                    {bwatTotal}
+                  </span>
+                </div>
               )}
             </div>
           )}
         </div>
-      </div>
 
-      {/* TIME Assessment — 2x2 grid */}
-      <div className="flex items-center justify-between mb-1 px-1">
-        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">TIME Assessment</span>
-        <span className="text-[10px] text-muted-foreground/50">Scale: 1 (critical) → 10 (healed)</span>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        {(
-          Object.keys(
-            result.time_classification
-          ) as (keyof TimeClassification)[]
-        ).map((dim) => (
-          <TimeScoreCard
-            key={dim}
-            dimension={dim}
-            data={result.time_classification[dim]}
-          />
-        ))}
-      </div>
+        {/* BWAT Assessment — 2x2 grid */}
+        <div className="flex flex-col gap-0.5 mb-1 px-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">BWAT Assessment</span>
+            <span className="text-[10px] text-muted-foreground/50">Scale: 1 (best) → 5 (worst)</span>
+          </div>
+          <p className="text-[9px] text-muted-foreground/40 leading-tight">
+            Bates-Jensen Wound Assessment Tool — 13 items, validated (ICC&nbsp;=&nbsp;0.90). Total: 13 (healed) → 65 (critical).
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {(
+            Object.keys(
+              result.time_classification
+            ) as (keyof TimeClassification)[]
+          ).map((dim) => (
+            <TimeScoreCard
+              key={dim}
+              dimension={dim}
+              data={result.time_classification[dim]}
+            />
+          ))}
+        </div>
 
-      {/* Slot: content injected before Clinical Summary */}
-      {renderBeforeSummary}
+        {/* Slot: content injected before Clinical Summary */}
+        {renderBeforeSummary}
 
       {/* Clinical Summary removed — redundant with TIME scores + patient header */}
 
-      {/* Clinical Guidance (Nurse Q&A) — shown before recommendations */}
-      {parsed && parsed.clinicalGuidance.length > 0 && (
-        <CollapsibleSection
-          title="Clinical Guidance"
-          icon={<MessageCircle className="h-4 w-4" />}
-          defaultOpen
-        >
-          <div className="space-y-3 pt-3">
-            <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-medium">
-              Answers based on wound assessment
-            </p>
-            {parsed.clinicalGuidance.map((qa, i) => (
-              <div
-                key={i}
-                className="rounded-xl overflow-hidden ring-1 ring-rose-500/15"
-              >
-                {qa.question && (
-                  <div className="px-4 py-2.5 bg-rose-500/10 border-b border-rose-500/10">
-                    <p className="text-[13px] font-semibold text-rose-400 flex items-start gap-2">
-                      <span className="shrink-0 text-rose-400/60">Q</span>
-                      <span>{qa.question}?</span>
-                    </p>
-                  </div>
-                )}
-                <div className="px-4 py-3">
-                  <p className="text-[13px] text-foreground/75 leading-[1.7] tracking-[0.01em]">
-                    {qa.answer.split('. ').reduce<React.ReactNode[]>((acc, sentence, si, arr) => {
-                      if (si > 0) acc.push(<span key={`br-${si}`} className="inline-block w-full h-1.5" />);
-                      acc.push(<span key={`s-${si}`}>{sentence}{si < arr.length - 1 ? '.' : ''}</span>);
-                      return acc;
-                    }, [])}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CollapsibleSection>
-      )}
-
-      {/* Recommendations */}
-      {parsed && parsed.recommendations.length > 0 && (
-        <CollapsibleSection
-          title="Recommendations"
-          icon={<ClipboardCheck className="h-4 w-4" />}
-          defaultOpen
-        >
-          <div className="space-y-2 pt-3">
-            {parsed.recommendations.map((rec, i) => {
-              const accents = [
-                { gradient: "from-blue-500/12 to-indigo-500/6", ring: "ring-blue-500/15", num: "text-blue-400", numBg: "bg-blue-500/20" },
-                { gradient: "from-violet-500/12 to-purple-500/6", ring: "ring-violet-500/15", num: "text-violet-400", numBg: "bg-violet-500/20" },
-                { gradient: "from-cyan-500/12 to-sky-500/6", ring: "ring-cyan-500/15", num: "text-cyan-400", numBg: "bg-cyan-500/20" },
-                { gradient: "from-emerald-500/12 to-teal-500/6", ring: "ring-emerald-500/15", num: "text-emerald-400", numBg: "bg-emerald-500/20" },
-                { gradient: "from-sky-500/12 to-blue-500/6", ring: "ring-sky-500/15", num: "text-sky-400", numBg: "bg-sky-500/20" },
-              ];
-              const a = accents[i % accents.length];
-              return (
+        {/* Clinical Guidance (Nurse Q&A) — shown before recommendations */}
+        {parsed && parsed.clinicalGuidance.length > 0 && (
+          <CollapsibleSection
+            title="Clinical Guidance"
+            icon={<MessageCircle className="h-4 w-4" />}
+            defaultOpen
+          >
+            <div className="space-y-3 pt-3">
+              <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider font-medium">
+                Answers based on wound assessment
+              </p>
+              {parsed.clinicalGuidance.map((qa, i) => (
                 <div
                   key={i}
-                  className={cn(
-                    "flex items-start gap-3 p-3 rounded-xl ring-1 bg-gradient-to-r",
-                    a.gradient, a.ring
-                  )}
+                  className="rounded-xl overflow-hidden ring-1 ring-rose-500/15"
                 >
-                  <span className={cn(
-                    "mt-0.5 w-5 h-5 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0",
-                    a.numBg, a.num
-                  )}>
-                    {i + 1}
-                  </span>
-                  <p className="text-[13px] text-foreground/80 leading-relaxed">
-                    {rec}
-                  </p>
+                  {qa.question && (
+                    <div className="px-4 py-2.5 bg-rose-500/10 border-b border-rose-500/10">
+                      <p className="text-[13px] font-semibold text-rose-400 flex items-start gap-2">
+                        <span className="shrink-0 text-rose-400/60">Q</span>
+                        <span>{qa.question}?</span>
+                      </p>
+                    </div>
+                  )}
+                  <div className="px-4 py-3">
+                    <p className="text-[13px] text-foreground/75 leading-[1.7] tracking-[0.01em]">
+                      {qa.answer.split('. ').reduce<React.ReactNode[]>((acc, sentence, si, arr) => {
+                        if (si > 0) acc.push(<span key={`br-${si}`} className="inline-block w-full h-1.5" />);
+                        acc.push(<span key={`s-${si}`}>{sentence}{si < arr.length - 1 ? '.' : ''}</span>);
+                        return acc;
+                      }, [])}
+                    </p>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        </CollapsibleSection>
-      )}
-
-      {/* Contradiction Warning */}
-      {result.contradiction_flag && result.contradiction_detail && (
-        <div className="apple-card p-4 ring-1 ring-orange-300/20">
-          <div className="flex items-start gap-3">
-            <ShieldAlert className="h-5 w-5 text-orange-300 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-foreground">
-                Image / Audio Contradiction
-              </p>
-              <p className="text-[13px] text-foreground/80 mt-1 leading-relaxed">
-                {result.contradiction_detail}
-              </p>
+              ))}
             </div>
-          </div>
-        </div>
-      )}
+          </CollapsibleSection>
+        )}
 
-      {/* Full Report */}
-      <div className="apple-card overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setFullReportOpen((v) => !v)}
-          className={cn(
-            "w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left",
-            "min-h-[48px] transition-colors"
-          )}
-          aria-expanded={fullReportOpen}
-        >
-          <div className="flex items-center gap-2.5">
-            <span className="text-primary/60">
-              <FileText className="h-4 w-4" />
-            </span>
-            <span className="text-[13px] font-semibold text-foreground">
-              Full Report
-            </span>
-            <span className="text-[10px] text-muted-foreground/50 bg-muted px-1.5 py-0.5 rounded ring-1 ring-border">
-              RAW
-            </span>
-          </div>
-          {fullReportOpen ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground/50 shrink-0" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-muted-foreground/50 shrink-0" />
-          )}
-        </button>
-        {fullReportOpen && (
-          <div className="px-4 pb-4 pt-0">
-            <div className="border-t border-border pt-3 max-w-none">
-              {renderMarkdown(result.report_text)}
+        {/* Recommendations */}
+        {parsed && parsed.recommendations.length > 0 && (
+          <CollapsibleSection
+            title="Recommendations"
+            icon={<ClipboardCheck className="h-4 w-4" />}
+            defaultOpen
+          >
+            <div className="space-y-2 pt-3">
+              {parsed.recommendations.map((rec, i) => {
+                const accents = [
+                  { gradient: "from-blue-500/12 to-indigo-500/6", ring: "ring-blue-500/15", num: "text-blue-400", numBg: "bg-blue-500/20" },
+                  { gradient: "from-violet-500/12 to-purple-500/6", ring: "ring-violet-500/15", num: "text-violet-400", numBg: "bg-violet-500/20" },
+                  { gradient: "from-cyan-500/12 to-sky-500/6", ring: "ring-cyan-500/15", num: "text-cyan-400", numBg: "bg-cyan-500/20" },
+                  { gradient: "from-emerald-500/12 to-teal-500/6", ring: "ring-emerald-500/15", num: "text-emerald-400", numBg: "bg-emerald-500/20" },
+                  { gradient: "from-sky-500/12 to-blue-500/6", ring: "ring-sky-500/15", num: "text-sky-400", numBg: "bg-sky-500/20" },
+                ];
+                const a = accents[i % accents.length];
+                return (
+                  <div
+                    key={i}
+                    className={cn(
+                      "flex items-start gap-3 p-3 rounded-xl ring-1 bg-gradient-to-r",
+                      a.gradient, a.ring
+                    )}
+                  >
+                    <span className={cn(
+                      "mt-0.5 w-5 h-5 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0",
+                      a.numBg, a.num
+                    )}>
+                      {i + 1}
+                    </span>
+                    <p className="text-[13px] text-foreground/80 leading-relaxed">
+                      {rec}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </CollapsibleSection>
+        )}
+
+        {/* Contradiction Warning */}
+        {result.contradiction_flag && result.contradiction_detail && (
+          <div className="apple-card p-4 ring-1 ring-orange-300/20">
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="h-5 w-5 text-orange-300 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Image / Audio Contradiction
+                </p>
+                <p className="text-[13px] text-foreground/80 mt-1 leading-relaxed">
+                  {result.contradiction_detail}
+                </p>
+              </div>
             </div>
           </div>
         )}
+
+        {/* Full Report */}
+        <div className="apple-card overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setFullReportOpen((v) => !v)}
+            className={cn(
+              "w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left",
+              "min-h-[48px] transition-colors"
+            )}
+            aria-expanded={fullReportOpen}
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="text-primary/60">
+                <FileText className="h-4 w-4" />
+              </span>
+              <span className="text-[13px] font-semibold text-foreground">
+                Full Report
+              </span>
+              <span className="text-[10px] text-muted-foreground/50 bg-muted px-1.5 py-0.5 rounded ring-1 ring-border">
+                RAW
+              </span>
+            </div>
+            {fullReportOpen ? (
+              <ChevronUp className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+            )}
+          </button>
+          {fullReportOpen && (
+            <div className="px-4 pb-4 pt-0">
+              <div className="border-t border-border pt-3 max-w-none">
+                {renderMarkdown(result.report_text)}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
     </div>

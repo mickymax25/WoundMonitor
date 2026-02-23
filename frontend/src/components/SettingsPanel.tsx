@@ -611,6 +611,24 @@ function AppInfoSection() {
           </p>
         </div>
 
+        {/* Scoring Methodology */}
+        <div className="bg-[var(--surface-2)] rounded-xl p-3 border border-border/20 space-y-2">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+            Scoring Methodology
+          </p>
+          <p className="text-[12px] text-muted-foreground/80 leading-relaxed">
+            Wound assessments are scored using the{" "}
+            <span className="font-semibold text-muted-foreground">Bates-Jensen Wound Assessment Tool (BWAT)</span>,
+            a validated clinical instrument with inter-rater reliability ICC&nbsp;=&nbsp;0.90
+            (Bates-Jensen et al., 2001).
+          </p>
+          <p className="text-[12px] text-muted-foreground/80 leading-relaxed">
+            MedGemma evaluates all 13 BWAT items (scored 1-5 each) including Size,
+            Depth, Edges, Undermining, Necrotic tissue, Exudate, Skin color, Edema,
+            Induration, Granulation, and Epithelialization. Total score: 13 (healed) to 65 (critical).
+          </p>
+        </div>
+
         {/* Disclaimer */}
         <div className="flex gap-2.5 p-3 rounded-xl bg-orange-300/5 ring-1 ring-orange-300/10">
           <ShieldAlert className="h-4 w-4 text-orange-300/60 shrink-0 mt-0.5" />

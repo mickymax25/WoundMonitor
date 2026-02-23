@@ -68,6 +68,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     logger.info("Starting WoundChrono API.")
     db.init_db()
+    db.migrate_patient_tokens()
+    db.migrate_assessment_extras()
     db.migrate_assessment_images()
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 

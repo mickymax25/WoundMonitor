@@ -94,16 +94,47 @@ def _save_upload(file: UploadFile, subdir: str) -> str:
     return dest
 
 
+_BWAT_TO_TIME = {
+    "tissue": ["necrotic_type", "necrotic_amount", "granulation"],
+    "inflammation": ["skin_color", "edema", "induration"],
+    "moisture": ["exudate_type", "exudate_amount"],
+    "edge": ["edges", "undermining", "epithelialization"],
+}
+
+
 def _assessment_to_response(a: dict[str, Any]) -> AssessmentResponse:
     """Convert a raw DB assessment dict to an AssessmentResponse."""
+    # Parse BWAT items from DB
+    bwat_items_dict: dict[str, int] = {}
+    bwat_items_raw = a.get("bwat_items")
+    if bwat_items_raw:
+        try:
+            bwat_items_dict = json.loads(bwat_items_raw)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     time_cls = None
     if a.get("tissue_type") is not None:
-        time_cls = TimeClassification(
-            tissue=TimeScore(type=a["tissue_type"], score=a["tissue_score"]),
-            inflammation=TimeScore(type=a["inflammation"], score=a["inflammation_score"]),
-            moisture=TimeScore(type=a["moisture"], score=a["moisture_score"]),
-            edge=TimeScore(type=a["edge"], score=a["edge_score"]),
-        )
+        dim_scores = {}
+        for dim, db_keys in [
+            ("tissue", ("tissue_type", "tissue_score")),
+            ("inflammation", ("inflammation", "inflammation_score")),
+            ("moisture", ("moisture", "moisture_score")),
+            ("edge", ("edge", "edge_score")),
+        ]:
+            bwat_dim_items = {k: bwat_items_dict[k] for k in _BWAT_TO_TIME[dim] if k in bwat_items_dict}
+            bwat_composite = None
+            if bwat_dim_items:
+                vals = [v for v in bwat_dim_items.values() if isinstance(v, (int, float))]
+                if vals:
+                    bwat_composite = round(sum(vals) / len(vals), 2)
+            dim_scores[dim] = TimeScore(
+                type=a[db_keys[0]],
+                score=a[db_keys[1]],
+                bwat_composite=bwat_composite,
+                bwat_items=bwat_dim_items if bwat_dim_items else None,
+            )
+        time_cls = TimeClassification(**dim_scores)
 
     zeroshot = None
     if a.get("zeroshot_scores"):
@@ -145,6 +176,9 @@ def _assessment_to_response(a: dict[str, Any]) -> AssessmentResponse:
         alert_level=a.get("alert_level"),
         alert_detail=a.get("alert_detail"),
         healing_comment=a.get("healing_comment"),
+        bwat_total=a.get("bwat_total"),
+        bwat_size=a.get("bwat_size"),
+        bwat_depth=a.get("bwat_depth"),
         created_at=a["created_at"],
     )
 
@@ -182,6 +216,26 @@ def update_patient(patient_id: str, body: PatientUpdate) -> PatientResponse:
     return _patient_response(patient)
 
 
+def _compute_healing_score(assessment: dict[str, Any] | None) -> float | None:
+    """Return BWAT total (13-65) if available, else legacy 1.0-10.0 from TIME scores."""
+    if not assessment:
+        return None
+    bwat_total = assessment.get("bwat_total")
+    if bwat_total and bwat_total > 0:
+        return float(bwat_total)
+    scores = [
+        assessment.get("tissue_score"),
+        assessment.get("inflammation_score"),
+        assessment.get("moisture_score"),
+        assessment.get("edge_score"),
+    ]
+    valid = [s for s in scores if s is not None]
+    if not valid:
+        return None
+    raw = sum(valid) / len(valid)
+    return max(1.0, min(10.0, round(raw * 10, 1)))
+
+
 def _patient_response(patient: dict[str, Any]) -> PatientResponse:
     """Enrich a patient dict with latest trajectory/alert and assessment count."""
     assessments = db.get_patient_assessments(patient["id"])
@@ -207,6 +261,7 @@ def _patient_response(patient: dict[str, Any]) -> PatientResponse:
         latest_alert_level=latest.get("alert_level") if latest else None,
         assessment_count=len(assessments),
         patient_reported_count=db.count_patient_reported(patient["id"]),
+        latest_healing_score=_compute_healing_score(latest),
     )
 
 
@@ -296,13 +351,36 @@ def analyze_assessment(assessment_id: str) -> AnalysisResult:
         logger.exception("Analysis failed for assessment %s", assessment_id)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    # Build response
-    time_cls = TimeClassification(
-        tissue=TimeScore(type=result["tissue_type"], score=result["tissue_score"]),
-        inflammation=TimeScore(type=result["inflammation"], score=result["inflammation_score"]),
-        moisture=TimeScore(type=result["moisture"], score=result["moisture_score"]),
-        edge=TimeScore(type=result["edge"], score=result["edge_score"]),
-    )
+    # Parse BWAT items for per-dimension composites
+    bwat_items_dict: dict[str, int] = {}
+    bwat_items_raw = result.get("bwat_items")
+    if bwat_items_raw:
+        try:
+            bwat_items_dict = json.loads(bwat_items_raw) if isinstance(bwat_items_raw, str) else bwat_items_raw
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Build response with BWAT composites per dimension
+    dim_scores = {}
+    for dim, db_keys in [
+        ("tissue", ("tissue_type", "tissue_score")),
+        ("inflammation", ("inflammation", "inflammation_score")),
+        ("moisture", ("moisture", "moisture_score")),
+        ("edge", ("edge", "edge_score")),
+    ]:
+        bwat_dim_items = {k: bwat_items_dict[k] for k in _BWAT_TO_TIME[dim] if k in bwat_items_dict}
+        bwat_composite = None
+        if bwat_dim_items:
+            vals = [v for v in bwat_dim_items.values() if isinstance(v, (int, float))]
+            if vals:
+                bwat_composite = round(sum(vals) / len(vals), 2)
+        dim_scores[dim] = TimeScore(
+            type=result[db_keys[0]],
+            score=result[db_keys[1]],
+            bwat_composite=bwat_composite,
+            bwat_items=bwat_dim_items if bwat_dim_items else None,
+        )
+    time_cls = TimeClassification(**dim_scores)
     zeroshot = json.loads(result["zeroshot_scores"]) if isinstance(result["zeroshot_scores"], str) else result["zeroshot_scores"]
 
     return AnalysisResult(
@@ -316,7 +394,11 @@ def analyze_assessment(assessment_id: str) -> AnalysisResult:
         report_text=result.get("report_text", ""),
         alert_level=result.get("alert_level", "green"),
         alert_detail=result.get("alert_detail"),
+        critical_mode=result.get("critical_mode"),
         healing_comment=result.get("healing_comment"),
+        bwat_total=result.get("bwat_total"),
+        bwat_size=result.get("bwat_size"),
+        bwat_depth=result.get("bwat_depth"),
     )
 
 
@@ -375,6 +457,7 @@ def get_trajectory(patient_id: str) -> list[TrajectoryPoint]:
                 edge_score=a.get("edge_score"),
                 trajectory=a.get("trajectory"),
                 change_score=a.get("change_score"),
+                bwat_total=a.get("bwat_total"),
             )
         )
     return points

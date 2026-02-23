@@ -164,6 +164,8 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
           .sort((a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime());
         if (analyzed.length > 0) {
           const latest = analyzed[0];
+          const criticalModeHint =
+            (latest.alert_detail ?? "").toLowerCase().includes("critical visual flag");
           setAnalysisResult({
             assessment_id: latest.id,
             time_classification: latest.time_classification!,
@@ -175,7 +177,13 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
             report_text: latest.report_text ?? "",
             alert_level: latest.alert_level ?? "green",
             alert_detail: latest.alert_detail ?? null,
+            critical_mode: latest.critical_mode ?? criticalModeHint,
             healing_comment: latest.healing_comment ?? null,
+            previous_visit_date: null,
+            previous_healing_score: null,
+            bwat_total: latest.bwat_total ?? null,
+            bwat_size: latest.bwat_size ?? null,
+            bwat_depth: latest.bwat_depth ?? null,
           });
         }
       } catch {
@@ -208,6 +216,8 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
           .sort((a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime());
         if (analyzed.length > 0) {
           const latest = analyzed[0];
+          const criticalModeHint =
+            (latest.alert_detail ?? "").toLowerCase().includes("critical visual flag");
           setAnalysisResult({
             assessment_id: latest.id,
             time_classification: latest.time_classification!,
@@ -219,7 +229,13 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
             report_text: latest.report_text ?? "",
             alert_level: latest.alert_level ?? "green",
             alert_detail: latest.alert_detail ?? null,
+            critical_mode: latest.critical_mode ?? criticalModeHint,
             healing_comment: latest.healing_comment ?? null,
+            previous_visit_date: null,
+            previous_healing_score: null,
+            bwat_total: latest.bwat_total ?? null,
+            bwat_size: latest.bwat_size ?? null,
+            bwat_depth: latest.bwat_depth ?? null,
           });
         }
       } catch {
@@ -245,6 +261,8 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
   const handleSelectHistoryAssessment = useCallback(
     (a: AssessmentResponse) => {
       if (!a.time_classification) return;
+      const criticalModeHint =
+        (a.alert_detail ?? "").toLowerCase().includes("critical visual flag");
       setAnalysisResult({
         assessment_id: a.id,
         time_classification: a.time_classification,
@@ -256,22 +274,38 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
         report_text: a.report_text ?? "",
         alert_level: a.alert_level ?? "green",
         alert_detail: a.alert_detail ?? null,
+        critical_mode: a.critical_mode ?? criticalModeHint,
         healing_comment: a.healing_comment ?? null,
+        previous_visit_date: null,
+        previous_healing_score: null,
+        bwat_total: a.bwat_total ?? null,
+        bwat_size: a.bwat_size ?? null,
+        bwat_depth: a.bwat_depth ?? null,
       });
     },
     []
   );
 
-  // Avatar gradient on dark surface (shared by patient cards + header)
-  function avatarGradient(patient: PatientResponse, urgent?: boolean): string {
-    if (urgent && patient.latest_alert_level === "red")
+  // BWAT severity helpers — lower BWAT = better (13=best, 65=worst)
+  function bwatSeverity(score: number | null): "minimal" | "moderate" | "severe" | "critical" | null {
+    if (score == null || score <= 0) return null;
+    if (score <= 26) return "minimal";
+    if (score <= 39) return "moderate";
+    if (score <= 52) return "severe";
+    return "critical";
+  }
+
+  // Avatar gradient on dark surface — based on BWAT severity
+  function avatarGradient(patient: PatientResponse): string {
+    const sev = bwatSeverity(patient.latest_healing_score);
+    if (sev === "critical")
       return "bg-gradient-to-br from-rose-500/20 to-rose-600/10 text-rose-400 ring-1 ring-rose-500/20";
-    if (urgent)
+    if (sev === "severe")
       return "bg-gradient-to-br from-orange-300/20 to-orange-600/10 text-orange-300 ring-1 ring-orange-300/20";
-    if (patient.latest_trajectory === "improving")
+    if (sev === "moderate")
+      return "bg-gradient-to-br from-sky-400/20 to-sky-600/10 text-sky-400 ring-1 ring-sky-400/20";
+    if (sev === "minimal")
       return "bg-gradient-to-br from-emerald-500/20 to-teal-600/10 text-emerald-400 ring-1 ring-emerald-500/20";
-    if (patient.latest_trajectory === "stable")
-      return "bg-gradient-to-br from-blue-500/15 to-indigo-600/10 text-blue-400 ring-1 ring-blue-500/15";
     return "bg-gradient-to-br from-slate-500/15 to-slate-600/10 text-slate-400 ring-1 ring-slate-500/15";
   }
 
@@ -394,15 +428,14 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
       day: "numeric",
     });
 
-    // Alert accent line color
-    function accentColor(level: string | null): string {
-      switch (level) {
-        case "red": return "bg-rose-500";
-        case "orange": return "bg-orange-300";
-        case "yellow": return "bg-orange-300";
-        case "green": return "bg-emerald-500";
-        default: return "bg-slate-600";
-      }
+    // Accent line color — based on BWAT severity
+    function accentColor(patient: PatientResponse): string {
+      const sev = bwatSeverity(patient.latest_healing_score);
+      if (sev == null) return "bg-slate-600";
+      if (sev === "minimal") return "bg-emerald-500";
+      if (sev === "moderate") return "bg-sky-400";
+      if (sev === "severe") return "bg-orange-300";
+      return "bg-rose-500";
     }
 
     // ---- Patient card ----
@@ -418,7 +451,7 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
         >
           <div className="flex">
             {/* Accent line */}
-            <div className={cn("w-[3px] shrink-0 rounded-l-[18px]", accentColor(patient.latest_alert_level))} />
+            <div className={cn("w-[3px] shrink-0 rounded-l-[18px]", accentColor(patient))} />
 
             <div className="flex-1 flex items-start gap-3.5 p-4">
               {/* Avatar — tappable to go to dashboard */}
@@ -430,7 +463,7 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
                 <div
                   className={cn(
                     "w-12 h-12 rounded-2xl flex items-center justify-center text-[13px] font-bold tracking-wide",
-                    avatarGradient(patient, urgent)
+                    avatarGradient(patient)
                   )}
                 >
                   {getInitials(patient.name)}
@@ -451,40 +484,51 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
                 onClick={() => handleSelectPatient(patient)}
                 className="flex-1 min-w-0 text-left active:opacity-70 transition-opacity"
               >
-                {/* Name row */}
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-[15px] font-bold text-foreground truncate leading-tight tracking-tight">
-                    {patient.name}
-                  </p>
-                  <span className="text-[11px] text-muted-foreground/60 shrink-0 tabular-nums flex items-center gap-1">
-                    <Clock className="h-2.5 w-2.5" />
-                    {relativeTime(patient.created_at)}
-                  </span>
+                {/* Name + trajectory + score */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="text-[15px] font-bold text-foreground truncate leading-tight tracking-tight">
+                      {patient.name}
+                    </p>
+                    <TrajectoryBadge trajectory={patient.latest_trajectory} />
+                  </div>
+                  {patient.latest_healing_score != null && patient.latest_healing_score > 0 && (
+                    <span className={cn(
+                      "inline-flex items-center text-[11px] font-bold tabular-nums shrink-0",
+                      bwatSeverity(patient.latest_healing_score) === "critical"
+                        ? "text-rose-400"
+                        : bwatSeverity(patient.latest_healing_score) === "severe"
+                          ? "text-orange-300"
+                          : bwatSeverity(patient.latest_healing_score) === "moderate"
+                            ? "text-sky-400"
+                            : "text-emerald-400"
+                    )}>
+                      {patient.latest_healing_score}<span className="text-[9px] font-normal text-muted-foreground/40">/65</span>
+                    </span>
+                  )}
                 </div>
 
-                {/* Wound info — higher contrast */}
-                <p className="text-[13px] text-foreground/50 truncate mt-1.5 leading-tight">
-                  {woundLabel(patient.wound_type, patient.wound_location)}
-                  {patient.age ? <span className="text-foreground/30"> · {patient.age}y</span> : ""}
-                </p>
-
-                {/* Badges row — more spacing */}
-                <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-                  <TrajectoryBadge trajectory={patient.latest_trajectory} />
-                  {patient.comorbidities.length > 0 && (
-                    <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full ring-1 ring-violet-500/15">
-                      {patient.comorbidities.length} comorb.
+                {/* Wound info + time + visits */}
+                <div className="flex items-center justify-between gap-2 mt-1.5">
+                  <p className="text-[13px] text-foreground/50 truncate leading-tight">
+                    {woundLabel(patient.wound_type, patient.wound_location)}
+                    {patient.age ? <span className="text-foreground/30"> · {patient.age}y</span> : ""}
+                  </p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {patient.patient_reported_count > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-full ring-1 ring-blue-500/15 animate-pulse">
+                        <ImagePlus className="h-2.5 w-2.5" />
+                        {patient.patient_reported_count}
+                      </span>
+                    )}
+                    <span className="text-[11px] text-muted-foreground/50 tabular-nums flex items-center gap-1">
+                      <Clock className="h-2.5 w-2.5" />
+                      {relativeTime(patient.created_at)}
                     </span>
-                  )}
-                  {patient.patient_reported_count > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full ring-1 ring-blue-500/15 animate-pulse">
-                      <ImagePlus className="h-2.5 w-2.5" />
-                      {patient.patient_reported_count} new
+                    <span className="text-[11px] text-muted-foreground/40 tabular-nums">
+                      · {patient.assessment_count} visit{patient.assessment_count !== 1 ? "s" : ""}
                     </span>
-                  )}
-                  <span className="text-[10px] text-muted-foreground/40 ml-auto tabular-nums">
-                    {patient.assessment_count} visit{patient.assessment_count !== 1 ? "s" : ""}
-                  </span>
+                  </div>
                 </div>
               </button>
 
@@ -761,7 +805,7 @@ export default function Dashboard({ onSignOut }: { onSignOut?: () => void }) {
             <div
               className={cn(
                 "w-11 h-11 rounded-[14px] flex items-center justify-center text-[13px] font-bold tracking-wide",
-                avatarGradient(selectedPatient, isUrgent)
+                avatarGradient(selectedPatient)
               )}
             >
               {getInitials(selectedPatient.name)}

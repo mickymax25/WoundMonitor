@@ -55,26 +55,22 @@ const TRAJ_CONFIG: Record<
   },
 };
 
-function healingScore(a: AssessmentResponse): number {
-  const tc = a.time_classification;
-  if (!tc) return 0;
-  const scores = (["tissue", "inflammation", "moisture", "edge"] as const)
-    .map((d) => tc[d]?.score)
-    .filter((s): s is number => s != null && s > 0);
-  if (scores.length === 0) return 0;
-  const avg = scores.reduce((x, y) => x + y, 0) / scores.length;
-  return Math.max(1, Math.min(10, Math.round(avg * 10)));
+function getBwatTotal(a: AssessmentResponse): number | null {
+  if (a.bwat_total && a.bwat_total > 0) return a.bwat_total;
+  return null;
 }
 
-function scoreColor(score: number): string {
-  if (score >= 7) return "text-emerald-400";
-  if (score >= 4) return "text-orange-300";
+function bwatScoreColor(total: number): string {
+  if (total <= 26) return "text-emerald-400";
+  if (total <= 39) return "text-sky-400";
+  if (total <= 52) return "text-orange-300";
   return "text-rose-400";
 }
 
-function barColor(score: number): string {
-  if (score >= 7) return "bg-emerald-500";
-  if (score >= 4) return "bg-orange-300";
+function bwatBarColor(total: number): string {
+  if (total <= 26) return "bg-emerald-400";
+  if (total <= 39) return "bg-sky-400";
+  if (total <= 52) return "bg-orange-300";
   return "bg-rose-500";
 }
 
@@ -245,21 +241,23 @@ function GalleryModal({
                     <span>{TRAJ_CONFIG[current.trajectory].label}</span>
                   </div>
                 )}
-                {current.time_classification && (() => {
-                  const hs = healingScore(current);
+                {(() => {
+                  const bt = getBwatTotal(current);
+                  if (bt == null) return null;
+                  const pct = Math.round(((65 - bt) / 52) * 100);
                   return (
                     <>
                       <span className="w-px h-4 bg-white/10 shrink-0" />
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <div className="flex-1 rounded-full h-1.5 bg-white/10">
                           <div
-                            className={cn("rounded-full h-1.5", barColor(hs))}
-                            style={{ width: `${hs * 10}%` }}
+                            className={cn("rounded-full h-1.5", bwatBarColor(bt))}
+                            style={{ width: `${pct}%` }}
                           />
                         </div>
-                        <span className={cn("text-[13px] font-bold tabular-nums shrink-0", scoreColor(hs))}>
-                          {hs}
-                          <span className="text-[9px] font-normal text-white/30">/10</span>
+                        <span className={cn("text-[13px] font-bold tabular-nums shrink-0", bwatScoreColor(bt))}>
+                          {bt}
+                          <span className="text-[9px] font-normal text-white/30">/65</span>
                         </span>
                       </div>
                     </>
@@ -267,13 +265,14 @@ function GalleryModal({
                 })()}
               </div>
 
-              {/* TIME cartouche */}
+              {/* BWAT dimension cartouche */}
               {current.time_classification && (
                 <div className="shrink-0 flex items-center gap-2 px-2.5 py-2 rounded-xl bg-white/[0.06] ring-1 ring-white/10">
                   {(["tissue", "inflammation", "moisture", "edge"] as const).map((dim, i) => {
                     const s = current.time_classification![dim];
                     if (!s) return null;
-                    const val = Math.round(s.score * 10);
+                    const comp = s.bwat_composite;
+                    if (comp == null || comp <= 0) return null;
                     return (
                       <React.Fragment key={dim}>
                         {i > 0 && <span className="w-px h-4 bg-white/10" />}
@@ -283,9 +282,9 @@ function GalleryModal({
                           </span>
                           <span className={cn(
                             "text-[12px] font-bold tabular-nums leading-tight",
-                            val >= 7 ? "text-emerald-400" : val >= 4 ? "text-orange-300" : "text-rose-400"
+                            comp <= 2.0 ? "text-emerald-400" : comp <= 3.5 ? "text-orange-300" : "text-rose-400"
                           )}>
-                            {val}
+                            {comp.toFixed(1)}
                           </span>
                         </div>
                       </React.Fragment>

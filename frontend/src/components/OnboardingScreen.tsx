@@ -46,9 +46,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         <img
           src="/LogoWM_V2_cropped.png"
           alt="Wound Monitor"
-          width={260}
-          height={108}
-          className="h-16 w-auto mb-3"
+          className="h-14 w-auto max-w-[280px] object-contain mb-3"
         />
         <p className="text-[15px] font-medium tracking-[0.15em] text-muted-foreground/70 uppercase onboard-motto">
           Never miss a sign.

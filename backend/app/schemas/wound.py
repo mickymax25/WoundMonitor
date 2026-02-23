@@ -61,6 +61,7 @@ class PatientResponse(BaseModel):
     latest_alert_level: str | None = None
     assessment_count: int = 0
     patient_reported_count: int = 0
+    latest_healing_score: float | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +71,8 @@ class PatientResponse(BaseModel):
 class TimeScore(BaseModel):
     type: str
     score: float
+    bwat_composite: float | None = None
+    bwat_items: dict[str, int] | None = None
 
 
 class TimeClassification(BaseModel):
@@ -116,6 +119,9 @@ class AssessmentResponse(BaseModel):
     alert_level: str | None = None
     alert_detail: str | None = None
     healing_comment: str | None = None
+    bwat_total: int | None = None
+    bwat_size: int | None = None
+    bwat_depth: int | None = None
     created_at: str
 
 
@@ -131,6 +137,7 @@ class TrajectoryPoint(BaseModel):
     edge_score: float | None = None
     trajectory: str | None = None
     change_score: float | None = None
+    bwat_total: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +155,13 @@ class AnalysisResult(BaseModel):
     report_text: str
     alert_level: str
     alert_detail: str | None = None
+    critical_mode: bool | None = None
     healing_comment: str | None = None
+    previous_visit_date: str | None = None
+    previous_healing_score: float | None = None
+    bwat_total: int | None = None
+    bwat_size: int | None = None
+    bwat_depth: int | None = None
 
 
 # ---------------------------------------------------------------------------

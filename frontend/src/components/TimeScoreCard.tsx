@@ -16,83 +16,76 @@ interface TimeScoreCardProps {
 }
 
 // ---------------------------------------------------------------------------
-// Healing scale: 1-10 (intuitive), derived from the 0-1 raw score
+// BWAT per-item scale: 1 (best) to 5 (worst) — lower is better
+// Thresholds aligned with total BWAT: <=2 ~ <=26/65, <=3.5 ~ <=45/65
 // ---------------------------------------------------------------------------
 
-function toHealingScore(raw: number): number {
-  return Math.max(1, Math.min(10, Math.round(raw * 10)));
-}
-
-// ---------------------------------------------------------------------------
-// Status labels — clinically meaningful per healing level
-// ---------------------------------------------------------------------------
-
-function healingStatus(score: number): string {
-  if (score >= 0.8) return "Healing well";
-  if (score >= 0.6) return "Progressing";
-  if (score >= 0.4) return "Needs attention";
-  if (score >= 0.2) return "Concerning";
-  return "Critical";
-}
-
-function statusColor(score: number): string {
-  if (score >= 0.7) return "text-emerald-400";
-  if (score >= 0.4) return "text-orange-300";
+function bwatColor(composite: number): string {
+  if (composite <= 2.0) return "text-emerald-400";
+  if (composite <= 3.0) return "text-sky-400";
+  if (composite <= 4.0) return "text-orange-300";
   return "text-rose-400";
 }
 
-function barColor(score: number): string {
-  if (score >= 0.7) return "bg-emerald-400";
-  if (score >= 0.4) return "bg-orange-300";
+function bwatBarColor(composite: number): string {
+  if (composite <= 2.0) return "bg-emerald-400";
+  if (composite <= 3.0) return "bg-sky-400";
+  if (composite <= 4.0) return "bg-orange-300";
   return "bg-rose-400";
 }
 
-function statusBadge(score: number): string {
-  if (score >= 0.7) return "bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/15";
-  if (score >= 0.4) return "bg-orange-300/10 text-orange-300 ring-1 ring-orange-300/15";
-  return "bg-rose-500/10 text-rose-400 ring-1 ring-rose-500/15";
+function bwatAccentBorder(composite: number): string {
+  if (composite <= 2.0) return "border-emerald-500/20";
+  if (composite <= 3.0) return "border-sky-400/20";
+  if (composite <= 4.0) return "border-orange-300/20";
+  return "border-rose-500/20";
 }
 
+// Short BWAT item labels for compact display
+const BWAT_SHORT: Record<string, string> = {
+  necrotic_type: "Nec",
+  necrotic_amount: "Amt",
+  granulation: "Gran",
+  skin_color: "Skin",
+  edema: "Edm",
+  induration: "Ind",
+  exudate_type: "Exu",
+  exudate_amount: "Amt",
+  edges: "Edg",
+  undermining: "Und",
+  epithelialization: "Epi",
+};
+
 // ---------------------------------------------------------------------------
-// Dimension config — what each TIME dimension measures
+// Dimension config
 // ---------------------------------------------------------------------------
 
 const DIMENSION_CONFIG: Record<
   string,
   {
     label: string;
-    measures: string;
     icon: React.ElementType;
-    accent: string;
     iconColor: string;
   }
 > = {
   tissue: {
     label: "Tissue",
-    measures: "Wound bed tissue type",
     icon: Activity,
-    accent: "bg-teal-400",
     iconColor: "text-teal-500",
   },
   inflammation: {
     label: "Inflammation",
-    measures: "Infection & inflammation signs",
     icon: Flame,
-    accent: "bg-orange-300",
     iconColor: "text-orange-300",
   },
   moisture: {
     label: "Moisture",
-    measures: "Wound moisture balance",
     icon: Droplets,
-    accent: "bg-sky-400",
     iconColor: "text-sky-500",
   },
   edge: {
     label: "Edge",
-    measures: "Wound edge progression",
     icon: GitBranch,
-    accent: "bg-violet-400",
     iconColor: "text-violet-500",
   },
 };
@@ -104,66 +97,83 @@ const DIMENSION_CONFIG: Record<
 export function TimeScoreCard({ dimension, data }: TimeScoreCardProps) {
   const config = DIMENSION_CONFIG[dimension] || {
     label: dimension,
-    measures: "",
     icon: Activity,
-    accent: "bg-slate-400",
     iconColor: "text-muted-foreground",
   };
 
   const Icon = config.icon;
-  const healing = toHealingScore(data.score);
-  const status = healingStatus(data.score);
-  const percent = Math.round(data.score * 100);
+  const hasBwat = data.bwat_composite != null && data.bwat_composite > 0;
+  const composite = hasBwat ? data.bwat_composite! : null;
+
+  // BWAT bar: 1=0%, 5=100% (higher = worse)
+  const barPercent = composite != null ? Math.round(((composite - 1) / 4) * 100) : 0;
 
   return (
-    <div className="apple-card overflow-hidden flex">
-      {/* Left accent bar */}
-      <div className={cn("w-1 shrink-0 rounded-l-xl", config.accent)} />
-
-      <div className="flex-1 p-3 min-w-0">
-        {/* Header: icon + label */}
-        <div className="flex items-center gap-1.5 mb-2">
+    <div
+      className={cn(
+        "apple-card overflow-hidden p-3",
+        composite != null && bwatAccentBorder(composite),
+      )}
+    >
+      {/* Row 1: icon + label + score */}
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-1.5">
           <Icon className={cn("h-3.5 w-3.5 shrink-0", config.iconColor)} />
-          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider truncate">
+          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
             {config.label}
           </span>
         </div>
-
-        {/* Clinical finding — the main content */}
-        <p className="text-[13px] text-foreground font-medium leading-snug mb-1.5 first-letter:uppercase line-clamp-2">
-          {data.type.toLowerCase()}
-        </p>
-
-        {/* Status badge */}
-        <div className="flex items-center justify-between mb-2">
-          <span
-            className={cn(
-              "text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap",
-              statusBadge(data.score),
-            )}
-          >
-            {status}
+        {composite != null ? (
+          <span className={cn("text-sm font-bold tabular-nums leading-none", bwatColor(composite))}>
+            {composite.toFixed(1)}
+            <span className="text-[9px] font-normal text-muted-foreground/40">/5</span>
           </span>
-          <span className={cn("text-sm font-bold tabular-nums", statusColor(data.score))}>
-            {healing}<span className="text-[10px] font-normal text-muted-foreground/50">/10</span>
-          </span>
-        </div>
+        ) : (
+          <span className="text-[10px] text-muted-foreground/40">N/A</span>
+        )}
+      </div>
 
-        {/* Healing bar with scale endpoints */}
-        <div className="rounded-full h-1.5 w-full bg-muted">
+      {/* Row 2: clinical finding */}
+      <p className="text-[11.5px] text-foreground/80 leading-snug mb-1.5 first-letter:uppercase line-clamp-2">
+        {data.type.toLowerCase()}
+      </p>
+
+      {/* Row 3: bar */}
+      {composite != null ? (
+        <div className="rounded-full h-1 w-full bg-muted/60">
           <div
             className={cn(
-              "rounded-full h-1.5 transition-all duration-700 ease-out",
-              barColor(data.score),
+              "rounded-full h-1 transition-all duration-700 ease-out",
+              bwatBarColor(composite),
             )}
-            style={{ width: `${percent}%` }}
+            style={{ width: `${barPercent}%` }}
           />
         </div>
-        <div className="flex justify-between mt-1">
-          <span className="text-[9px] text-muted-foreground/40">Critical</span>
-          <span className="text-[9px] text-muted-foreground/40">Healed</span>
+      ) : (
+        <div className="rounded-full h-1 w-full bg-muted/40" />
+      )}
+
+      {/* Row 4: compact BWAT items */}
+      {hasBwat && data.bwat_items && Object.keys(data.bwat_items).length > 0 && (
+        <div className="flex items-center gap-0.5 mt-1.5 overflow-hidden flex-wrap">
+          {Object.entries(data.bwat_items).map(([key, val]) => (
+            <span
+              key={key}
+              className={cn(
+                "text-[8px] tabular-nums px-1 py-px rounded bg-muted/40",
+                (val as number) <= 2
+                  ? "text-emerald-400/70"
+                  : (val as number) <= 3
+                    ? "text-muted-foreground/50"
+                    : "text-rose-400/70",
+              )}
+              title={key}
+            >
+              {BWAT_SHORT[key] || key.slice(0, 3)}:{val as number}
+            </span>
+          ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }

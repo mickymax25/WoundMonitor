@@ -109,3 +109,88 @@ class MedSigLIPWrapper:
             outputs = self._model(**inputs)
         probs = outputs.logits_per_image.softmax(dim=1)[0]
         return {label: round(float(p), 4) for label, p in zip(labels, probs)}
+
+    # ---- Per-dimension TIME scoring -----------------------------------------
+
+    # Each dimension has 3 labels: good (score=1.0), moderate (0.5), bad (0.0).
+    # SigLIP classifies between these 3 for each dimension independently.
+    _TIME_LABELS: dict[str, list[tuple[str, float]]] = {
+        "tissue": [
+            ("wound with healthy pink granulation tissue and clean wound bed", 1.0),
+            ("wound with yellow fibrinous slough partially covering the wound bed", 0.4),
+            ("wound with black necrotic eschar and devitalized tissue", 0.0),
+        ],
+        "inflammation": [
+            ("wound with clean healthy surrounding skin and no signs of infection", 1.0),
+            ("wound with mild redness and warmth around the wound edges", 0.5),
+            ("wound with severe infection cellulitis and purulent discharge", 0.0),
+        ],
+        "moisture": [
+            ("wound with moist glistening wound bed and balanced moisture", 1.0),
+            ("wound that appears dry with inadequate moisture", 0.35),
+            ("wound with heavy exudate and macerated periwound skin", 0.0),
+        ],
+        "edge": [
+            ("wound with advancing epithelial edges and active contraction", 1.0),
+            ("wound with attached but non-advancing wound edges", 0.45),
+            ("wound with rolled undermined wound edges and no epithelial advancement", 0.0),
+        ],
+    }
+
+    def classify_time_dimensions(self, image: Image.Image) -> dict[str, float]:
+        """Score each TIME dimension using logit difference between good/bad labels.
+
+        For each dimension, computes raw SigLIP logits for a "healthy" and a
+        "pathological" description. The logit difference (good - bad) is converted
+        to a score in [0, 1] via a calibrated sigmoid.
+
+        Returns: {"tissue": float, "inflammation": float, "moisture": float, "edge": float}
+        """
+        if self.mock:
+            seed = int.from_bytes(hashlib.md5(image.tobytes()).digest()[:4], "little")
+            rng = np.random.default_rng(seed + 2)
+            return {
+                dim: round(float(rng.random()), 2)
+                for dim in ("tissue", "inflammation", "moisture", "edge")
+            }
+
+        import math
+
+        image_inputs = self._image_processor(images=image, return_tensors="pt").to(self._infer_device)
+
+        # Score each dimension by comparing good vs bad label
+        logits: list[float] = []  # [good_T, good_I, good_M, good_E, bad_T, bad_I, bad_M, bad_E]
+        dims = list(self._TIME_LABELS.keys())
+        for dim in dims:
+            labels_pair = [self._TIME_LABELS[dim][0][0], self._TIME_LABELS[dim][-1][0]]
+            text_inputs = self._tokenizer(labels_pair, return_tensors="pt", padding=True).to(self._infer_device)
+            inputs = {**text_inputs, **image_inputs}
+            with torch.no_grad():
+                outputs = self._model(**inputs)
+            # logits_per_image shape: (1, 2) — [good_logit, bad_logit]
+            logits.append(float(outputs.logits_per_image[0, 0]))  # good
+            logits.append(float(outputs.logits_per_image[0, 1]))  # bad
+
+        results: dict[str, float] = {}
+        # Sigmoid calibration parameters
+        k = 10.0     # steepness: higher = more extreme scores
+        bias = 0.15  # shift sigmoid left: makes scores cluster lower (more clinical)
+
+        deltas = []
+        for i, dim in enumerate(dims):
+            good_logit = logits[i * 2]      # even indices: good
+            bad_logit = logits[i * 2 + 1]   # odd indices: bad
+            delta = good_logit - bad_logit - bias
+            deltas.append(delta + bias)  # log original delta
+            # Sigmoid mapping: delta > 0 means image is closer to "good"
+            score = 1.0 / (1.0 + math.exp(-k * delta))
+            results[dim] = round(score, 2)
+
+        logger.info(
+            "TIME logits — deltas: T=%.3f I=%.3f M=%.3f E=%.3f | "
+            "scores: T=%.2f I=%.2f M=%.2f E=%.2f",
+            deltas[0], deltas[1], deltas[2], deltas[3],
+            results["tissue"], results["inflammation"],
+            results["moisture"], results["edge"],
+        )
+        return results

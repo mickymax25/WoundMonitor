@@ -36,14 +36,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning style={{ backgroundColor: "#151d33", colorScheme: "dark" }}>
       <head>
+        <meta name="color-scheme" content="dark" />
+        <style dangerouslySetInnerHTML={{ __html: `html,body{background-color:#151d33!important;color-scheme:dark}` }} />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="mobile-web-app-capable" content="yes" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="apple-touch-startup-image" href="/splash-dark.png" />
       </head>
-      <body className={`${inter.variable} font-sans antialiased wc-hero`} suppressHydrationWarning>
+      <body className={`${inter.variable} font-sans antialiased wc-hero`} suppressHydrationWarning style={{ backgroundColor: "#151d33" }}>
         {children}
         <SwRegister />
       </body>

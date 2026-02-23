@@ -35,11 +35,14 @@ export interface PatientResponse {
   latest_alert_level: string | null;
   assessment_count: number;
   patient_reported_count: number;
+  latest_healing_score: number | null;
 }
 
 export interface TimeScore {
   type: string;
   score: number;
+  bwat_composite?: number | null;
+  bwat_items?: Record<string, number> | null;
 }
 
 export interface TimeClassification {
@@ -76,7 +79,11 @@ export interface AssessmentResponse {
   report_text: string | null;
   alert_level: string | null;
   alert_detail: string | null;
+  critical_mode?: boolean | null;
   healing_comment: string | null;
+  bwat_total: number | null;
+  bwat_size: number | null;
+  bwat_depth: number | null;
   created_at: string;
 }
 
@@ -91,7 +98,13 @@ export interface AnalysisResult {
   report_text: string;
   alert_level: string;
   alert_detail: string | null;
+  critical_mode?: boolean;
   healing_comment: string | null;
+  previous_visit_date: string | null;
+  previous_healing_score: number | null;
+  bwat_total: number | null;
+  bwat_size: number | null;
+  bwat_depth: number | null;
 }
 
 export interface TrajectoryPoint {
@@ -102,6 +115,7 @@ export interface TrajectoryPoint {
   edge_score: number | null;
   trajectory: string | null;
   change_score: number | null;
+  bwat_total: number | null;
 }
 
 export type WoundType =

@@ -66,28 +66,22 @@ const ALERT_DOT: Record<string, string> = {
   red: "bg-rose-500",
 };
 
-function healingScore(assessment: AssessmentResponse): number {
-  const tc = assessment.time_classification;
-  if (!tc) return 0;
-  const scores = (
-    ["tissue", "inflammation", "moisture", "edge"] as const
-  )
-    .map((d) => tc[d]?.score)
-    .filter((s): s is number => s != null && s > 0);
-  if (scores.length === 0) return 0;
-  const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-  return Math.max(1, Math.min(10, Math.round(avg * 10)));
+function getBwatTotal(assessment: AssessmentResponse): number | null {
+  if (assessment.bwat_total && assessment.bwat_total > 0) return assessment.bwat_total;
+  return null;
 }
 
-function barColor(score: number): string {
-  if (score >= 7) return "bg-emerald-500";
-  if (score >= 4) return "bg-orange-300";
+function bwatBarColor(total: number): string {
+  if (total <= 26) return "bg-emerald-400";
+  if (total <= 39) return "bg-sky-400";
+  if (total <= 52) return "bg-orange-300";
   return "bg-rose-500";
 }
 
-function scoreTextColor(score: number): string {
-  if (score >= 7) return "text-emerald-400";
-  if (score >= 4) return "text-orange-300";
+function bwatTextColor(total: number): string {
+  if (total <= 26) return "text-emerald-400";
+  if (total <= 39) return "text-sky-400";
+  if (total <= 52) return "text-orange-300";
   return "text-rose-400";
 }
 
@@ -199,7 +193,7 @@ export function AssessmentHistory({
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] text-muted-foreground/40">
-            1 (critical) → 10 (healed)
+            BWAT 13 (healed) → 65 (critical)
           </span>
           {expanded ? (
             <ChevronUp className="h-4 w-4 text-muted-foreground/50" />
@@ -218,8 +212,9 @@ export function AssessmentHistory({
               TRAJECTORY_DISPLAY[assessment.trajectory ?? "baseline"];
             const alertDot =
               ALERT_DOT[assessment.alert_level ?? ""] ?? "bg-slate-500";
-            const hs = healingScore(assessment);
-            const pct = hs * 10;
+            const bt = getBwatTotal(assessment);
+            // Inverted percent: lower BWAT = more bar (better)
+            const pct = bt != null ? Math.round(((65 - bt) / 52) * 100) : 0;
 
             return (
               <div
@@ -271,29 +266,36 @@ export function AssessmentHistory({
                     )}
                   </div>
 
-                  {/* Row 2: healing score bar */}
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 rounded-full h-2 bg-muted/50">
-                      <div
+                  {/* Row 2: BWAT score bar */}
+                  {bt != null ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 rounded-full h-2 bg-muted/50">
+                        <div
+                          className={cn(
+                            "rounded-full h-2 transition-all duration-500",
+                            bwatBarColor(bt)
+                          )}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span
                         className={cn(
-                          "rounded-full h-2 transition-all duration-500",
-                          barColor(hs)
+                          "text-sm font-bold tabular-nums w-10 text-right",
+                          bwatTextColor(bt)
                         )}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <span
-                      className={cn(
-                        "text-sm font-bold tabular-nums w-8 text-right",
-                        scoreTextColor(hs)
-                      )}
-                    >
-                      {hs}
-                      <span className="text-[9px] font-normal text-muted-foreground/40">
-                        /10
+                      >
+                        {bt}
+                        <span className="text-[9px] font-normal text-muted-foreground/40">
+                          /65
+                        </span>
                       </span>
-                    </span>
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 rounded-full h-2 bg-muted/50" />
+                      <span className="text-[10px] text-muted-foreground/40 w-10 text-right">N/A</span>
+                    </div>
+                  )}
                 </button>
 
                 {/* Expanded media section */}

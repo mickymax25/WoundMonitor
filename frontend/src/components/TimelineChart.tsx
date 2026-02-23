@@ -21,36 +21,25 @@ interface TimelineChartProps {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function avgScore(point: TrajectoryPoint): number {
-  const scores = [
-    point.tissue_score,
-    point.inflammation_score,
-    point.moisture_score,
-    point.edge_score,
-  ].filter((s): s is number => s != null && s > 0);
-  if (scores.length === 0) return 0;
-  return scores.reduce((a, b) => a + b, 0) / scores.length;
-}
-
-function toHealingScore(raw: number): number {
-  return Math.max(1, Math.min(10, Math.round(raw * 10)));
-}
-
-function barColor(score: number): string {
-  if (score >= 7) return "bg-emerald-500";
-  if (score >= 4) return "bg-orange-300";
+// BWAT severity helpers — lower score = better
+function bwatBarColor(total: number): string {
+  if (total <= 26) return "bg-emerald-400";
+  if (total <= 39) return "bg-sky-400";
+  if (total <= 52) return "bg-orange-300";
   return "bg-rose-500";
 }
 
-function barBg(score: number): string {
-  if (score >= 7) return "bg-emerald-500/10";
-  if (score >= 4) return "bg-orange-300/10";
+function bwatBarBg(total: number): string {
+  if (total <= 26) return "bg-emerald-500/10";
+  if (total <= 39) return "bg-sky-400/10";
+  if (total <= 52) return "bg-orange-300/10";
   return "bg-rose-500/10";
 }
 
-function scoreTextColor(score: number): string {
-  if (score >= 7) return "text-emerald-400";
-  if (score >= 4) return "text-orange-300";
+function bwatTextColor(total: number): string {
+  if (total <= 26) return "text-emerald-400";
+  if (total <= 39) return "text-sky-400";
+  if (total <= 52) return "text-orange-300";
   return "text-rose-400";
 }
 
@@ -153,22 +142,23 @@ export function TimelineChart({ patientId, refreshKey }: TimelineChartProps) {
           <span className="text-sm font-semibold text-foreground">Healing Trend</span>
         </div>
         <div className="flex items-center gap-1 text-[11px]">
-          <span className="text-muted-foreground">Scale:</span>
-          <span className="text-rose-400">1</span>
+          <span className="text-muted-foreground">BWAT:</span>
+          <span className="text-emerald-400">13</span>
           <span className="text-muted-foreground/50">→</span>
-          <span className="text-emerald-400">10</span>
+          <span className="text-rose-400">65</span>
         </div>
       </div>
 
       {/* Visit bars */}
       <div className="space-y-2.5">
         {data.map((point, idx) => {
-          const raw = avgScore(point);
-          const healing = toHealingScore(raw);
-          const pct = Math.round(raw * 100);
+          const bt = point.bwat_total;
+          if (bt == null || bt <= 0) return null;
+          // Inverted: lower BWAT = more bar (better)
+          const pct = Math.round(((65 - bt) / 52) * 100);
 
           return (
-            <div key={idx} className={cn("rounded-lg p-2.5 border border-border/30", barBg(healing))}>
+            <div key={idx} className={cn("rounded-lg p-2.5 border border-border/30", bwatBarBg(bt))}>
               {/* Row: date + trajectory + score */}
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-2">
@@ -191,13 +181,13 @@ export function TimelineChart({ patientId, refreshKey }: TimelineChartProps) {
               <div className="flex items-center gap-2">
                 <div className="flex-1 rounded-full h-2 bg-muted/50">
                   <div
-                    className={cn("rounded-full h-2 transition-all duration-500", barColor(healing))}
+                    className={cn("rounded-full h-2 transition-all duration-500", bwatBarColor(bt))}
                     style={{ width: `${pct}%` }}
                   />
                 </div>
-                <span className={cn("text-sm font-bold tabular-nums w-8 text-right", scoreTextColor(healing))}>
-                  {healing}
-                  <span className="text-[9px] font-normal text-muted-foreground/40">/10</span>
+                <span className={cn("text-sm font-bold tabular-nums w-10 text-right", bwatTextColor(bt))}>
+                  {bt}
+                  <span className="text-[9px] font-normal text-muted-foreground/40">/65</span>
                 </span>
               </div>
             </div>

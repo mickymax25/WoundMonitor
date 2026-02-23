@@ -276,6 +276,8 @@ def update_assessment(assessment_id: str, data: dict[str, Any]) -> dict[str, Any
             "zeroshot_scores", "audio_path", "nurse_notes", "text_notes",
             "change_score", "trajectory", "contradiction_flag",
             "contradiction_detail", "report_text", "alert_level", "alert_detail",
+            "healing_comment", "previous_visit_date", "previous_healing_score",
+            "bwat_total", "bwat_size", "bwat_depth", "bwat_items", "bwat_description",
         }
         cols = []
         vals: list[Any] = []
@@ -357,6 +359,33 @@ def migrate_patient_tokens() -> None:
         acols = [row[1] for row in conn.execute("PRAGMA table_info(assessments)").fetchall()]
         if "source" not in acols:
             conn.execute("ALTER TABLE assessments ADD COLUMN source TEXT DEFAULT 'nurse'")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def migrate_assessment_extras() -> None:
+    """Add newer assessment columns if missing."""
+    conn = get_db()
+    try:
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(assessments)").fetchall()]
+        # Add columns introduced after initial schema
+        if "healing_comment" not in cols:
+            conn.execute("ALTER TABLE assessments ADD COLUMN healing_comment TEXT")
+        if "previous_visit_date" not in cols:
+            conn.execute("ALTER TABLE assessments ADD COLUMN previous_visit_date TEXT")
+        if "previous_healing_score" not in cols:
+            conn.execute("ALTER TABLE assessments ADD COLUMN previous_healing_score REAL")
+        if "bwat_total" not in cols:
+            conn.execute("ALTER TABLE assessments ADD COLUMN bwat_total REAL")
+        if "bwat_size" not in cols:
+            conn.execute("ALTER TABLE assessments ADD COLUMN bwat_size REAL")
+        if "bwat_depth" not in cols:
+            conn.execute("ALTER TABLE assessments ADD COLUMN bwat_depth REAL")
+        if "bwat_items" not in cols:
+            conn.execute("ALTER TABLE assessments ADD COLUMN bwat_items TEXT")
+        if "bwat_description" not in cols:
+            conn.execute("ALTER TABLE assessments ADD COLUMN bwat_description TEXT")
         conn.commit()
     finally:
         conn.close()

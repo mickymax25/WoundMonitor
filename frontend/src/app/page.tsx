@@ -25,10 +25,13 @@ function resolveScreen(): Exclude<AppScreen, "splash"> {
     /* corrupted */
   }
 
-  const onboarded = localStorage.getItem(ONBOARDED_KEY);
-  if (onboarded === "true") return "auth";
-
-  return "onboarding";
+  // Auto-login: skip onboarding + auth for demo flow
+  localStorage.setItem(ONBOARDED_KEY, "true");
+  localStorage.setItem(
+    AUTH_KEY,
+    JSON.stringify({ loggedIn: true, name: "Dr. Demo", role: "nurse" }),
+  );
+  return "app";
 }
 
 export default function Page() {
@@ -89,7 +92,7 @@ export default function Page() {
           <img
             src="/LogoWM_V2_cropped.png"
             alt="Wound Monitor"
-            className="h-20 w-auto"
+            className="h-14 w-auto max-w-[280px] object-contain"
           />
           <p className="text-[15px] font-medium text-muted-foreground/70 tracking-[0.2em] uppercase splash-text">
             Never miss a sign.
