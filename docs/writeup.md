@@ -13,7 +13,7 @@ https://www.youtube.com/watch?v=yPOCyGpESkU
 ### Problem statement
 Chronic wounds (diabetic foot ulcers, pressure injuries, venous ulcers, burns) require frequent reassessment. Yet in practice, wound severity is still judged subjectively from visual inspection and narrative notes. Two clinicians can look at the same wound and disagree on whether it is improving or deteriorating. This inconsistency delays escalation, increases infection risk, and can ultimately lead to avoidable amputations and hospitalizations.
 
-**Scale of the problem (commonly cited estimates):** 12M people live with chronic wounds worldwide; ~$28B annual treatment cost in the US; and up to 60% of complications could be prevented with earlier detection.
+**Scale of the problem (sourced estimates):** In the U.S. Medicare population, chronic wounds affect ~8.2 million beneficiaries (~15%) and cost $28.1–$31.7B annually. [1][2] For pressure ulcers specifically, 80–95% may be avoidable with prevention protocols. [3]
 
 The TIME framework (Tissue, Inflammation/Infection, Moisture, Edge) improves communication but **does not provide a numeric, reproducible scale**. That means longitudinal tracking is still weak: improvement versus deterioration is often decided by “feel,” not a measurable trajectory. The highest‑impact opportunity is to turn a wound photo into a consistent numeric score that can be compared across visits and clinicians.
 
@@ -71,6 +71,11 @@ https://github.com/mickymax25/WoundMonitor
 - Regulatory clearance would be required for autonomous use.
 
 ---
+
+## Sources
+[1] Alliance of Wound Care Stakeholders — Value in Health chronic wounds study (Medicare 5% LDS, 2014): https://www.woundcarestakeholders.org/news/research-and-publications  
+[2] APTA — “Study: CMS Should Pay Closer Attention to Chronic Wounds” (summary of Value in Health study): https://www.apta.org/news/2017/10/16/study-cms-should-pay-closer-attention-to-chronic-wounds  
+[3] Centre for Reviews and Dissemination (University of York) — “Preventing pressure ulcers”: https://www.york.ac.uk/crd/publications/effectiveness-matters/preventing-pressure-ulcers/
 
 ## Appendix — Historical LoRA Experiment (Not Used in Final Submission)
 We previously fine‑tuned MedGemma 1.5 4B‑IT with LoRA to regress TIME scores (0–1). This improved agreement with teacher labels but introduced instability on out‑of‑distribution cases. For this submission we **disabled LoRA** and grounded scoring in BWAT with deterministic conversion.
