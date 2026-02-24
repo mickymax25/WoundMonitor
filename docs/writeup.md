@@ -1,4 +1,4 @@
-oui# Wound Monitor — Objective Wound Trajectory Assessment with Three HAI‑DEF Models
+# Wound Monitor — Objective Wound Trajectory Assessment with Three HAI‑DEF Models
 
 ### Project name
 Wound Monitor — Objective Wound Trajectory Assessment
@@ -13,9 +13,9 @@ https://www.youtube.com/watch?v=yPOCyGpESkU
 ### Problem statement
 Chronic wounds (diabetic foot ulcers, pressure injuries, venous ulcers, burns) require frequent reassessment. Yet in practice, wound severity is still judged subjectively from visual inspection and narrative notes. Two clinicians can look at the same wound and disagree on whether it is improving or deteriorating. This inconsistency delays escalation, increases infection risk, and can ultimately lead to avoidable amputations and hospitalizations.
 
-**Scale of the problem (sourced estimates):** In the U.S. Medicare population, chronic wounds affect ~8.2 million beneficiaries (~15%) and cost $28.1–$31.7B annually. [1][2] For pressure ulcers specifically, 80–95% may be avoidable with prevention protocols. [3]
+**Scale of the problem (sourced estimates):** In the U.S. Medicare population, chronic wounds affect ~8.2 million beneficiaries (~15%) and total wound‑related spending is estimated at $28.1–$96.8B annually. [1][2]
 
-The TIME framework (Tissue, Inflammation/Infection, Moisture, Edge) improves communication but **does not provide a numeric, reproducible scale**. That means longitudinal tracking is still weak: improvement versus deterioration is often decided by “feel,” not a measurable trajectory. The highest‑impact opportunity is to turn a wound photo into a consistent numeric score that can be compared across visits and clinicians.
+The TIME framework (Tissue, Inflammation/Infection, Moisture, Edge) improves communication but **does not provide a numeric, reproducible scale**. That means longitudinal tracking is still weak: improvement versus deterioration is often decided by “feel,” not a measurable trajectory. The highest‑impact opportunity is to turn a wound photo into a consistent numeric score that can be compared across visits and clinicians, enabling earlier escalation and more consistent care.
 
 **User journey today:** a community nurse photographs a wound, writes a note, and makes a subjective call about severity. Escalation depends on that subjective judgment and may be delayed.
 
@@ -55,8 +55,9 @@ The system uses three HAI‑DEF models in a single pipeline:
 **Deployment and feasibility**
 - Runs end‑to‑end on a single GPU instance, making it feasible for hospitals or regional deployments without heavy infrastructure.
 - MedSigLIP can be CPU‑offloaded to reduce GPU memory pressure.
-- BWAT scoring is deterministic once observations are extracted, improving stability across runs.
+- BWAT scoring is deterministic once observations are extracted, improving stability across runs and reducing score drift.
 - Critical Mode allows safe escalation paths without relying on long narrative interpretation.
+- Failure handling: if structured extraction fails, the system falls back to vision‑based signals and escalates conservatively.
 
 **Live testing**
 We tested the system end‑to‑end with a live backend on Google Cloud (g2‑standard‑4, NVIDIA L4), demonstrating real model inference and complete UI workflow.
@@ -73,9 +74,8 @@ https://github.com/mickymax25/WoundMonitor
 ---
 
 ## Sources
-[1] Alliance of Wound Care Stakeholders — Value in Health chronic wounds study (Medicare 5% LDS, 2014): https://www.woundcarestakeholders.org/news/research-and-publications  
-[2] APTA — “Study: CMS Should Pay Closer Attention to Chronic Wounds” (summary of Value in Health study): https://www.apta.org/news/2017/10/16/study-cms-should-pay-closer-attention-to-chronic-wounds  
-[3] Centre for Reviews and Dissemination (University of York) — “Preventing pressure ulcers”: https://www.york.ac.uk/crd/publications/effectiveness-matters/preventing-pressure-ulcers/
+[1] Nussbaum et al., *Value in Health* (2018): Medicare chronic wounds prevalence and cost estimates. https://pubmed.ncbi.nlm.nih.gov/29304937/  
+[2] Sen, *Advances in Wound Care* (2019): compendium summarizing Medicare wound burden. https://pmc.ncbi.nlm.nih.gov/articles/PMC6389759/
 
 ## Appendix — Historical LoRA Experiment (Not Used in Final Submission)
 We previously fine‑tuned MedGemma 1.5 4B‑IT with LoRA to regress TIME scores (0–1). This improved agreement with teacher labels but introduced instability on out‑of‑distribution cases. For this submission we **disabled LoRA** and grounded scoring in BWAT with deterministic conversion.
