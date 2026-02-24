@@ -1,72 +1,36 @@
 # Wound Monitor — Objective Wound Trajectory Assessment with Three HAI‑DEF Models
 
-## TL;DR
-Wound Monitor is a PWA that converts a wound photo into a **numeric, reproducible** severity score using the 13‑item **BWAT** scale (13–65) and derives **TIME composites** for intuitive trends. It orchestrates **MedGemma (reasoning + structured observations), MedSigLIP (visual change), and MedASR (nurse dictation)** and includes a **Critical Mode** for red‑flag findings with one‑tap referral.
+### Project name
+Wound Monitor — Objective Wound Trajectory Assessment
 
----
+### Your team
+- Michael HAYAT — Engineer & Data Science: product architecture, ML pipeline, backend, frontend.
+- Delphine HAYAT-Hackoun — Docteur en Cardiologie: clinical framing, validation lens, care pathway design.
 
-## 1. The Problem
-Chronic wound care depends on knowing whether a wound is improving, stable, or deteriorating — yet assessments are still subjective. The TIME framework (Tissue, Inflammation/Infection, Moisture, Edge) helps clinicians speak the same language, but **TIME alone is not a numeric, reproducible scale**.
+### Problem statement
+Chronic wound care depends on knowing whether a wound is improving, stable, or deteriorating — yet assessments remain subjective. The TIME framework (Tissue, Inflammation/Infection, Moisture, Edge) improves communication but **is not a numeric, reproducible scale**. This leads to missed deterioration, delayed escalation, and avoidable complications. A reliable numeric trajectory is the missing instrument in wound care.
 
-## 2. The Solution
-We use **BWAT** as the primary numeric scale (13 items × 1–5, total 13–65), then **derive TIME composites** for visualization and communication. This produces a consistent numeric trajectory while retaining clinician‑friendly vocabulary.
+### Overall solution:
+Wound Monitor is a **Progressive Web App (PWA)** that converts a wound photo into a **numeric, reproducible** severity score using the 13‑item **BWAT** scale (13–65) and derives **TIME composites** for intuitive trends. It orchestrates **MedGemma (reasoning + structured observations), MedSigLIP (visual change), and MedASR (nurse dictation)**. The system includes **Critical Mode** for red‑flag findings with one‑tap referral and **contradiction detection** when nurse narrative conflicts with model‑derived trajectory.
 
-### Key Innovations
-- **BWAT‑grounded scoring from vision‑language observations** (MedGemma base → JSON observations → deterministic BWAT item scoring).
-- **Critical Mode** for red‑flag findings (necrosis, maggots, gross infection) that collapses UI and triggers immediate referral.
-- **Contradiction detection** between nurse narrative and model‑derived trajectory.
-- **End‑to‑end care loop**: patient self‑report → nurse assessment → specialist referral.
+### Technical details
+The system uses three HAI‑DEF models in a single pipeline:
 
-### Architecture (Three HAI‑DEF Models)
-
-| Model | Role | Parameters |
-|---|---|---|
-| **MedGemma 1.5 4B‑IT (base)** | BWAT item observations (JSON), report generation, contradiction detection, clinical Q&A | 4B |
-| **MedSigLIP 0.9B** | Image embeddings for visual similarity + change detection | 0.9B |
-| **MedASR 105M** | Nurse voice note transcription | 105M |
-
-### Pipeline (Per Visit)
 1. **MedSigLIP embedding** for visual change detection.
 2. **MedGemma observation extraction** → BWAT item observations (JSON).
 3. **Deterministic BWAT scoring** (13–65) with per‑item scores.
-4. **TIME composites** derived from BWAT (for trend UI only).
+4. **TIME composites** derived from BWAT (trend UI only).
 5. **Previous visit retrieval** and trajectory computation.
 6. **MedASR transcription** of nurse dictation.
 7. **Contradiction detection** (rule‑based first; LLM fallback).
 8. **Structured clinical report** with recommendations + follow‑up timing.
-9. **Alerting + Critical Mode** when red‑flags are detected.
+9. **Alerting + Critical Mode** for red‑flags (necrosis, maggots, gross infection).
 
-**Critical Mode**: When severe visual cues are present, the UI simplifies to a single urgent alert with a direct physician‑referral CTA and disables non‑essential UI.
+**Deployment**: FastAPI + Next.js 14 PWA on a single **NVIDIA L4 (24GB)**. MedGemma runs in bfloat16; MedSigLIP can be CPU‑offloaded. We tested end‑to‑end with a live backend on Google Cloud (g2‑standard‑4, NVIDIA L4).
 
-### Care Loop: Patient → Nurse → Specialist
-- **Patient self‑reporting** via a shareable tokenized link (no login).
-- **Nurse assessment** with BWAT score, trajectory, report, and clinical Q&A.
-- **Physician referral** by one‑tap call/WhatsApp/email with pre‑filled urgency.
+**Care loop**: patient self‑report via tokenized link → nurse assessment → one‑tap physician referral.
 
-### Technical Stack
-FastAPI + Next.js 14 PWA on a single **NVIDIA L4 (24GB)**. MedGemma runs in bfloat16; MedSigLIP can be CPU‑offloaded. The pipeline adapts to burns via burn‑specific labels and prompts.
-
----
-
-## 3. Results and Impact
-We validated the system end‑to‑end with **real model inference** on GCP (g2‑standard‑4). The submission emphasizes **BWAT‑grounded scoring** and **critical safety behaviors**.
-
-### Qualitative Validation
-- **Stable numeric outputs** from deterministic BWAT scoring.
-- **High‑signal alerting** when red‑flag findings are present.
-- **Interpretable trends** using BWAT totals + TIME composites across visits.
-
-### Health Equity Impact
-- **Democratizes expertise**: consistent wound assessment without specialist training.
-- **Reduces variability**: same photo → same score across users.
-- **Decision support**: clinical Q&A tied to the actual image and scores.
-- **Earlier escalation**: critical cases are surfaced immediately.
-
-### Limitations
-- **Not a diagnosis**: requires clinical oversight and validation.
-- **Latency**: full pipeline still takes tens of seconds.
-- **Measurement gaps**: no true area/depth measurement yet.
-- **Regulatory**: intended as clinical decision support (not autonomous care).
+**Limitations**: not a diagnosis; latency still tens of seconds; no true area/depth measurement yet; intended as clinical decision support.
 
 ---
 
