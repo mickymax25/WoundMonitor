@@ -3,6 +3,9 @@
 ### Project name
 Wound Monitor — Objective Wound Trajectory Assessment
 
+### Demo video
+https://www.youtube.com/watch?v=yPOCyGpESkU
+
 ### Your team
 - Michael HAYAT — Engineer & Data Science: product architecture, ML pipeline, backend, frontend.
 - Delphine HAYAT-Hackoun — Docteur en Cardiologie: clinical framing, validation lens, care pathway design.
@@ -29,6 +32,8 @@ The system uses three HAI‑DEF models in a single pipeline:
 **Deployment**: FastAPI + Next.js 14 PWA on a single **NVIDIA L4 (24GB)**. MedGemma runs in bfloat16; MedSigLIP can be CPU‑offloaded. We tested end‑to‑end with a live backend on Google Cloud (g2‑standard‑4, NVIDIA L4).
 
 **Care loop**: patient self‑report via tokenized link → nurse assessment → one‑tap physician referral.
+
+**Public code repository**: https://github.com/mickymax25/WoundMonitor
 
 **Limitations**: not a diagnosis; latency still tens of seconds; no true area/depth measurement yet; intended as clinical decision support.
 
