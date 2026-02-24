@@ -12,6 +12,7 @@ import {
   Building2,
   Mail,
   Check,
+  X,
 } from "lucide-react";
 import {
   Dialog,
@@ -500,13 +501,15 @@ export function NewPatientDialog({ onCreated, trigger }: NewPatientDialogProps) 
         ) : (
         <>
         {/* ── Header ── */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between px-4 pb-3 pt-[calc(env(safe-area-inset-top,0px)+10px)] border-b border-white/[0.06]">
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="text-[13px] text-foreground/60 active:text-foreground transition-colors px-1 py-1 -ml-1 min-w-[44px] min-h-[44px] flex items-center"
+            className="text-[13px] text-foreground/70 active:text-foreground transition-colors px-1 py-1 -ml-1 min-w-[44px] min-h-[44px] flex items-center gap-1.5"
+            aria-label="Discard new patient"
           >
-            Cancel
+            <X className="h-4 w-4" />
+            Discard
           </button>
           <h2 className="text-[15px] font-bold text-foreground">New Patient</h2>
           <button
@@ -520,7 +523,14 @@ export function NewPatientDialog({ onCreated, trigger }: NewPatientDialogProps) 
                 : "text-muted-foreground/50"
             )}
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving…
+              </span>
+            ) : (
+              "Save Patient"
+            )}
           </button>
         </div>
 
