@@ -1,4 +1,4 @@
-# Wound Monitor — Objective Wound Trajectory Assessment with Three HAI‑DEF Models
+oui# Wound Monitor — Objective Wound Trajectory Assessment with Three HAI‑DEF Models
 
 ### Project name
 Wound Monitor — Objective Wound Trajectory Assessment
@@ -8,13 +8,30 @@ https://www.youtube.com/watch?v=yPOCyGpESkU
 
 ### Your team
 - Michael HAYAT — Engineer & Data Science: product architecture, ML pipeline, backend, frontend.
-- Delphine HAYAT-Hackoun — Docteur en Cardiologie: clinical framing, validation lens, care pathway design.
+- Delphine HAYAT-Hackoun — Cardiologist: clinical framing, validation lens, care pathway design.
 
 ### Problem statement
-Chronic wound care depends on knowing whether a wound is improving, stable, or deteriorating — yet assessments remain subjective. The TIME framework (Tissue, Inflammation/Infection, Moisture, Edge) improves communication but **is not a numeric, reproducible scale**. This leads to missed deterioration, delayed escalation, and avoidable complications. A reliable numeric trajectory is the missing instrument in wound care.
+Chronic wounds (diabetic foot ulcers, pressure injuries, venous ulcers, burns) require frequent reassessment. Yet in practice, wound severity is still judged subjectively from visual inspection and narrative notes. Two clinicians can look at the same wound and disagree on whether it is improving or deteriorating. This inconsistency delays escalation, increases infection risk, and can ultimately lead to avoidable amputations and hospitalizations.
+
+**Scale of the problem (commonly cited estimates):** 12M people live with chronic wounds worldwide; ~$28B annual treatment cost in the US; and up to 60% of complications could be prevented with earlier detection.
+
+The TIME framework (Tissue, Inflammation/Infection, Moisture, Edge) improves communication but **does not provide a numeric, reproducible scale**. That means longitudinal tracking is still weak: improvement versus deterioration is often decided by “feel,” not a measurable trajectory. The highest‑impact opportunity is to turn a wound photo into a consistent numeric score that can be compared across visits and clinicians.
+
+**User journey today:** a community nurse photographs a wound, writes a note, and makes a subjective call about severity. Escalation depends on that subjective judgment and may be delayed.
+
+**User journey with Wound Monitor:** the patient can self‑report between visits via a tokenized link, the nurse runs a BWAT‑grounded assessment with a structured report, and the physician receives a one‑tap referral when critical findings are detected. This closed loop (patient → nurse → physician) enables faster escalation and more consistent care decisions across sites.
 
 ### Overall solution:
-Wound Monitor is a **Progressive Web App (PWA)** that converts a wound photo into a **numeric, reproducible** severity score using the 13‑item **BWAT** scale (13–65) and derives **TIME composites** for intuitive trends. It orchestrates **MedGemma (reasoning + structured observations), MedSigLIP (visual change), and MedASR (nurse dictation)**. The system includes **Critical Mode** for red‑flag findings with one‑tap referral and **contradiction detection** when nurse narrative conflicts with model‑derived trajectory.
+Wound Monitor is a **Progressive Web App (PWA)** that converts a wound photo into a **numeric, reproducible** severity score using the 13‑item **BWAT** scale (13–65), and derives **TIME composites** for intuitive trends. The system orchestrates **MedGemma (reasoning + structured observations), MedSigLIP (visual change), and MedASR (nurse dictation)**.
+
+Key strengths aligned with HAI‑DEF usage:
+- **MedGemma** produces structured BWAT observations (JSON) and generates clinical narrative and recommendations.
+- **MedSigLIP** provides visual embeddings for change detection and supports stability when text is missing.
+- **MedASR** transcribes nurse dictation, allowing hands‑free use in the field.
+
+Clinical safety features:
+- **Critical Mode** for red‑flag findings (necrosis, maggots, gross infection) that collapses the UI into an urgent alert and triggers immediate referral.
+- **Contradiction detection** when nurse narrative conflicts with model‑derived trajectory, prompting review rather than silent disagreement.
 
 ### Technical details
 The system uses three HAI‑DEF models in a single pipeline:
@@ -29,13 +46,29 @@ The system uses three HAI‑DEF models in a single pipeline:
 8. **Structured clinical report** with recommendations + follow‑up timing.
 9. **Alerting + Critical Mode** for red‑flags (necrosis, maggots, gross infection).
 
-**Deployment**: FastAPI + Next.js 14 PWA on a single **NVIDIA L4 (24GB)**. MedGemma runs in bfloat16; MedSigLIP can be CPU‑offloaded. We tested end‑to‑end with a live backend on Google Cloud (g2‑standard‑4, NVIDIA L4).
+**Architecture and stack**
+- Backend: FastAPI + SQLite for rapid iteration and reproducible demos.
+- Frontend: Next.js 14 PWA (installable on mobile, offline‑friendly cache).
+- Models: MedGemma 1.5 4B‑IT (base), MedSigLIP 0.9B, MedASR 105M.
+- Deployment: single NVIDIA L4 (24GB) on Google Cloud.
 
-**Care loop**: patient self‑report via tokenized link → nurse assessment → one‑tap physician referral.
+**Deployment and feasibility**
+- Runs end‑to‑end on a single GPU instance, making it feasible for hospitals or regional deployments without heavy infrastructure.
+- MedSigLIP can be CPU‑offloaded to reduce GPU memory pressure.
+- BWAT scoring is deterministic once observations are extracted, improving stability across runs.
+- Critical Mode allows safe escalation paths without relying on long narrative interpretation.
 
-**Public code repository**: https://github.com/mickymax25/WoundMonitor
+**Live testing**
+We tested the system end‑to‑end with a live backend on Google Cloud (g2‑standard‑4, NVIDIA L4), demonstrating real model inference and complete UI workflow.
 
-**Limitations**: not a diagnosis; latency still tens of seconds; no true area/depth measurement yet; intended as clinical decision support.
+**Public code repository**
+https://github.com/mickymax25/WoundMonitor
+
+**Limitations**
+- This is **clinical decision support**, not a diagnosis.
+- Latency remains tens of seconds per full analysis.
+- No true area/depth measurement yet (future segmentation and measurement planned).
+- Regulatory clearance would be required for autonomous use.
 
 ---
 
