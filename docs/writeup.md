@@ -11,65 +11,61 @@ https://www.youtube.com/watch?v=yPOCyGpESkU
 - Delphine HAYAT-Hackoun — Cardiologist: clinical framing, validation lens, care pathway design.
 
 ### Problem statement
-Chronic wounds (diabetic foot ulcers, pressure injuries, venous ulcers, burns) require frequent reassessment. Yet in practice, wound severity is still judged subjectively from visual inspection and narrative notes. Two clinicians can look at the same wound and disagree on whether it is improving or deteriorating. This inconsistency delays escalation, increases infection risk, and can ultimately lead to avoidable amputations and hospitalizations.
+Chronic wound care is a monitoring problem. Clinicians must decide whether a wound is improving, stable, or deteriorating — yet assessments remain subjective. Two clinicians can view the same wound and reach different conclusions, delaying escalation and increasing infection risk.
 
-**Scale of the problem (sourced estimates):** In the U.S. Medicare population, chronic wounds affect ~8.2 million beneficiaries (~15%) and total wound‑related spending is estimated at $28.1–$96.8B annually. [1][2]
+**Scale (sourced):** In the U.S. Medicare population, chronic wounds affect ~8.2M beneficiaries (~15%) and total wound‑related spending is estimated at $28.1–$96.8B annually. [1][2]
 
-The TIME framework (Tissue, Inflammation/Infection, Moisture, Edge) improves communication but **does not provide a numeric, reproducible scale**. That means longitudinal tracking is still weak: improvement versus deterioration is often decided by “feel,” not a measurable trajectory. The highest‑impact opportunity is to turn a wound photo into a consistent numeric score that can be compared across visits and clinicians, enabling earlier escalation and more consistent care.
+The TIME framework improves communication but **is not a numeric, reproducible scale**. Without a consistent score, longitudinal tracking is weak and early deterioration is often missed.
 
-**User journey today:** a community nurse photographs a wound, writes a note, and makes a subjective call about severity. Escalation depends on that subjective judgment and may be delayed.
-
-**User journey with Wound Monitor:** the patient can self‑report between visits via a tokenized link, the nurse runs a BWAT‑grounded assessment with a structured report, and the physician receives a one‑tap referral when critical findings are detected. This closed loop (patient → nurse → physician) enables faster escalation and more consistent care decisions across sites.
+**User journey today:** patient photo + nurse note + subjective call → delayed escalation.  
+**User journey with Wound Monitor:** patient self‑report between visits → nurse runs BWAT‑grounded assessment → physician receives one‑tap referral on critical findings. This closed loop (patient → nurse → physician) standardizes decisions across sites.
 
 ### Overall solution:
-Wound Monitor is a **Progressive Web App (PWA)** that converts a wound photo into a **numeric, reproducible** severity score using the 13‑item **BWAT** scale (13–65), and derives **TIME composites** for intuitive trends. The system orchestrates **MedGemma (reasoning + structured observations), MedSigLIP (visual change), and MedASR (nurse dictation)**.
+Wound Monitor is a **Progressive Web App (PWA)** that turns a wound photo into a **BWAT numeric score (13–65)** and a **trend over time**, with **TIME composites** for intuitive visualization. It orchestrates **MedGemma (reasoning + structured observations), MedSigLIP (visual change), and MedASR (nurse dictation)** to deliver a complete clinical workflow.
 
-Key strengths aligned with HAI‑DEF usage:
-- **MedGemma** produces structured BWAT observations (JSON) and generates clinical narrative and recommendations.
-- **MedSigLIP** provides visual embeddings for change detection and supports stability when text is missing.
-- **MedASR** transcribes nurse dictation, allowing hands‑free use in the field.
+**HAI‑DEF model roles**
+- **MedGemma**: extracts BWAT item observations (JSON), generates clinical report and recommendations.
+- **MedSigLIP**: image embeddings for change detection and stability when text is missing.
+- **MedASR**: hands‑free transcription of nurse dictation.
 
-Clinical safety features:
-- **Critical Mode** for red‑flag findings (necrosis, maggots, gross infection) that collapses the UI into an urgent alert and triggers immediate referral.
-- **Contradiction detection** when nurse narrative conflicts with model‑derived trajectory, prompting review rather than silent disagreement.
+**Safety + escalation**
+- **Critical Mode** for red‑flag findings (necrosis, maggots, gross infection) that collapses UI to a single urgent alert with direct referral.
+- **Contradiction detection** when nurse narrative conflicts with model‑derived trajectory, prompting review.
 
 ### Technical details
-The system uses three HAI‑DEF models in a single pipeline:
-
-1. **MedSigLIP embedding** for visual change detection.
-2. **MedGemma observation extraction** → BWAT item observations (JSON).
-3. **Deterministic BWAT scoring** (13–65) with per‑item scores.
-4. **TIME composites** derived from BWAT (trend UI only).
-5. **Previous visit retrieval** and trajectory computation.
-6. **MedASR transcription** of nurse dictation.
-7. **Contradiction detection** (rule‑based first; LLM fallback).
-8. **Structured clinical report** with recommendations + follow‑up timing.
-9. **Alerting + Critical Mode** for red‑flags (necrosis, maggots, gross infection).
+**Pipeline (per visit)**
+1. MedSigLIP embedding for visual change detection.
+2. MedGemma observation extraction → BWAT item observations (JSON).
+3. Deterministic BWAT scoring (13–65) with per‑item scores.
+4. TIME composites derived from BWAT for trend UI only.
+5. Previous visit retrieval and trajectory computation.
+6. MedASR transcription of nurse dictation.
+7. Contradiction detection (rule‑based first; LLM fallback).
+8. Structured clinical report with recommendations and follow‑up timing.
+9. Alerting + Critical Mode for red‑flags.
 
 **Architecture and stack**
-- Backend: FastAPI + SQLite for rapid iteration and reproducible demos.
-- Frontend: Next.js 14 PWA (installable on mobile, offline‑friendly cache).
+- Backend: FastAPI + SQLite (reproducible demo).
+- Frontend: Next.js 14 PWA (installable on mobile).
 - Models: MedGemma 1.5 4B‑IT (base), MedSigLIP 0.9B, MedASR 105M.
 - Deployment: single NVIDIA L4 (24GB) on Google Cloud.
 
-**Deployment and feasibility**
-- Runs end‑to‑end on a single GPU instance, making it feasible for hospitals or regional deployments without heavy infrastructure.
-- MedSigLIP can be CPU‑offloaded to reduce GPU memory pressure.
-- BWAT scoring is deterministic once observations are extracted, improving stability across runs and reducing score drift.
-- Critical Mode allows safe escalation paths without relying on long narrative interpretation.
-- Failure handling: if structured extraction fails, the system falls back to vision‑based signals and escalates conservatively.
+**Feasibility**
+- Runs end‑to‑end on a single GPU instance; MedSigLIP can be CPU‑offloaded.
+- BWAT scoring is deterministic once observations are extracted, reducing score drift.
+- Conservative fallback: if structured extraction fails, the system falls back to vision signals and escalates.
 
 **Live testing**
-We tested the system end‑to‑end with a live backend on Google Cloud (g2‑standard‑4, NVIDIA L4), demonstrating real model inference and complete UI workflow.
+We tested the full workflow with a live backend on Google Cloud (g2‑standard‑4, NVIDIA L4).
 
 **Public code repository**
 https://github.com/mickymax25/WoundMonitor
 
 **Limitations**
-- This is **clinical decision support**, not a diagnosis.
+- Clinical decision support only (not a diagnosis).
 - Latency remains tens of seconds per full analysis.
-- No true area/depth measurement yet (future segmentation and measurement planned).
-- Regulatory clearance would be required for autonomous use.
+- No true area/depth measurement yet (segmentation planned).
+- Regulatory clearance required for autonomous use.
 
 ---
 
