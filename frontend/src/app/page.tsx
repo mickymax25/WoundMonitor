@@ -20,18 +20,14 @@ function resolveScreen(): Exclude<AppScreen, "splash"> {
     if (authRaw) {
       const auth = JSON.parse(authRaw);
       if (auth?.loggedIn === true) return "app";
+      return "auth";
     }
   } catch {
     /* corrupted */
   }
 
-  // Auto-login: skip onboarding + auth for demo flow
-  localStorage.setItem(ONBOARDED_KEY, "true");
-  localStorage.setItem(
-    AUTH_KEY,
-    JSON.stringify({ loggedIn: true, name: "Dr. Demo", role: "nurse" }),
-  );
-  return "app";
+  const onboarded = localStorage.getItem(ONBOARDED_KEY) === "true";
+  return onboarded ? "auth" : "onboarding";
 }
 
 export default function Page() {
@@ -40,16 +36,12 @@ export default function Page() {
 
   useEffect(() => {
     const target = resolveScreen();
+    const splashHoldMs = 3000;
+    const splashFadeMs = 800;
 
-    // If already logged in, skip splash
-    if (target === "app") {
-      setScreen("app");
-      return;
-    }
-
-    // Show splash for 2.5s, then fade out over 0.6s
-    const fadeTimer = setTimeout(() => setSplashFading(true), 2500);
-    const doneTimer = setTimeout(() => setScreen(target), 3100);
+    // Always show splash (even when auto-logging in) so the logo + motto are readable
+    const fadeTimer = setTimeout(() => setSplashFading(true), splashHoldMs);
+    const doneTimer = setTimeout(() => setScreen(target), splashHoldMs + splashFadeMs);
 
     return () => {
       clearTimeout(fadeTimer);

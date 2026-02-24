@@ -1,5 +1,7 @@
 # MedGemma LoRA Fine-Tuning Report — WoundChrono
 
+> Note: This LoRA experiment is **not used in the final submission**. The submitted system uses the base MedGemma model with BWAT-grounded scoring. This report is kept for historical reference only.
+
 ## Overview
 
 Fine-tuning of **MedGemma 1.5-4b-it** (Google's medical vision-language model) using LoRA adapters for structured wound assessment using the **TIME clinical framework** (Tissue, Inflammation, Moisture, Edge).

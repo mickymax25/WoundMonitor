@@ -17,6 +17,7 @@ env/
 **/woundchrono.db
 *.db
 data/CO2Wounds-V2*/
+config/
 
 # Environment
 .env
@@ -26,6 +27,8 @@ backend/.env
 frontend/node_modules/
 frontend/.next/
 frontend/out/
+.next/
+backend/.next/
 
 # IDE
 .vscode/
@@ -46,3 +49,15 @@ Thumbs.db
 
 # Logs
 *.log
+SESSION_LOG.md
+
+# Docs artifacts
+docs/*.pdf
+
+# Local assets / audits
+screenshots/
+frontend/ux-audit/
+
+# Local experiment scripts
+scripts/apply_int4_quantization.py
+scripts/optimize_time_labels.py

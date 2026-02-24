@@ -11,8 +11,8 @@ interface OnboardingScreenProps {
 const FEATURES = [
   {
     icon: Brain,
-    title: "TIME Classification",
-    description: "AI-powered wound scoring using the TIME framework",
+    title: "BWAT Assessment",
+    description: "13-item BWAT scoring with clinical red-flag detection",
     color: "text-blue-400",
     bg: "bg-blue-500/10 ring-blue-500/20",
   },
