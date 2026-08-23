@@ -182,7 +182,11 @@ def cmd_pipeline_run(args: argparse.Namespace) -> int:
             ingest.fetch_audio(conn, ep_id, media_dir)
         if conn.execute("SELECT status FROM episodes WHERE id=?", (ep_id,)
                         ).fetchone()["status"] == "fetched":
-            transcriber = transcribe_mod.GroqTranscriber()
+            import os
+
+            transcriber = (transcribe_mod.GroqTranscriber()
+                           if os.environ.get("GROQ_API_KEY")
+                           else transcribe_mod.OpenRouterTranscriber())
             print(f"S2 transcription ({transcriber.name})…")
             transcribe_mod.transcribe_episode(conn, ep_id, transcriber, media_dir)
 

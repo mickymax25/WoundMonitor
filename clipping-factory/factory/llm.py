@@ -39,13 +39,16 @@ class OpenRouterClient:
         self._transport = transport
 
     def complete_json(
-        self, system: str, user: str, schema: dict, max_tokens: int = 16000,
+        self, system: str, user: str | list, schema: dict, max_tokens: int = 16000,
         attempts: int = 3,
     ) -> dict:
         """Complétion contrainte par un JSON Schema ; renvoie l'objet parsé.
 
         Retries avec backoff sur 429/5xx et sur réponse vide — indispensable
         avec les modèles gratuits d'OpenRouter, fortement rate-limités.
+
+        `user` peut être une chaîne, ou une liste de content-parts multimodaux
+        (ex. [{"type": "text", ...}, {"type": "input_audio", ...}]).
         """
         if not self.api_key:
             raise LLMUnavailable("OPENROUTER_API_KEY absent")
