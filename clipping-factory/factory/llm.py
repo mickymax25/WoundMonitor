@@ -39,44 +39,72 @@ class OpenRouterClient:
         self._transport = transport
 
     def complete_json(
-        self, system: str, user: str, schema: dict, max_tokens: int = 16000
+        self, system: str, user: str, schema: dict, max_tokens: int = 16000,
+        attempts: int = 3,
     ) -> dict:
-        """Une complétion contrainte par un JSON Schema ; renvoie l'objet parsé."""
+        """Complétion contrainte par un JSON Schema ; renvoie l'objet parsé.
+
+        Retries avec backoff sur 429/5xx et sur réponse vide — indispensable
+        avec les modèles gratuits d'OpenRouter, fortement rate-limités.
+        """
         if not self.api_key:
             raise LLMUnavailable("OPENROUTER_API_KEY absent")
-        with httpx.Client(transport=self._transport, timeout=300) as client:
-            resp = client.post(
-                OPENROUTER_ENDPOINT,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "X-Title": "Usine a Clips",
-                },
-                json={
-                    "model": self.model,
-                    "max_tokens": max_tokens,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    "response_format": {
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": "output",
-                            "strict": True,
-                            "schema": schema,
+        last_error = "?"
+        for attempt in range(attempts):
+            if attempt:
+                import time
+
+                time.sleep(2 ** attempt)
+            with httpx.Client(transport=self._transport, timeout=300) as client:
+                resp = client.post(
+                    OPENROUTER_ENDPOINT,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "X-Title": "Usine a Clips",
+                    },
+                    json={
+                        "model": self.model,
+                        "max_tokens": max_tokens,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user},
+                        ],
+                        "response_format": {
+                            "type": "json_schema",
+                            "json_schema": {
+                                "name": "output",
+                                "strict": True,
+                                "schema": schema,
+                            },
                         },
                     },
-                },
-            )
-        resp.raise_for_status()
-        payload = resp.json()
-        try:
-            content = payload["choices"][0]["message"]["content"]
-            return json.loads(content)
-        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
-            raise LLMUnavailable(
-                f"réponse OpenRouter inexploitable ({self.model}): {exc}"
-            ) from exc
+                )
+            if resp.status_code == 402:
+                raise LLMUnavailable(
+                    "OpenRouter: crédits insuffisants (402) — ajouter du crédit"
+                    " ou choisir un modèle :free via OPENROUTER_MODEL"
+                )
+            if resp.status_code == 429 or resp.status_code >= 500:
+                last_error = f"HTTP {resp.status_code}"
+                continue
+            resp.raise_for_status()
+            payload = resp.json()
+            if "error" in payload:
+                last_error = str(payload["error"])[:200]
+                continue
+            try:
+                content = payload["choices"][0]["message"]["content"]
+                if not content:
+                    last_error = "réponse vide"
+                    continue
+                return json.loads(content)
+            except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+                last_error = str(exc)
+                continue
+        raise LLMUnavailable(
+            f"OpenRouter inexploitable après {attempts} tentatives"
+            f" ({self.model}): {last_error}"
+        )
 
 
 def anthropic_available() -> bool:
