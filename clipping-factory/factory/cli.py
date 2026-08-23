@@ -243,7 +243,7 @@ def cmd_produce_run(args: argparse.Namespace) -> int:
     from .assets import generate_placeholder_persona
     from .llm import LLMUnavailable, pick_writer
     from .reaction import TemplateReactionWriter
-    from .tts import ElevenLabsTTS, FixtureTTS, TTSUnavailable
+    from .tts import ElevenLabsTTS, FixtureTTS, OpenRouterTTS, TTSUnavailable, pick_tts
 
     settings = load_settings()
     conn = db.connect(settings.db_path)
@@ -252,10 +252,11 @@ def cmd_produce_run(args: argparse.Namespace) -> int:
     try:
         writer = (TemplateReactionWriter() if args.writer == "template"
                   else pick_writer())
-    except LLMUnavailable as exc:
+        tts = {"fixture": FixtureTTS, "elevenlabs": ElevenLabsTTS,
+               "openrouter": OpenRouterTTS, "auto": pick_tts}[args.tts]()
+    except (LLMUnavailable, TTSUnavailable) as exc:
         print(f"✗ {exc}")
         return 1
-    tts = FixtureTTS() if args.tts == "fixture" else ElevenLabsTTS()
 
     persona = Path(args.persona) if args.persona else media_dir / "persona.png"
     if not persona.exists():
@@ -471,8 +472,9 @@ def main(argv: list[str] | None = None) -> int:
     p_prun.add_argument("--writer", choices=["llm", "template"], default="llm",
                         help="llm = réaction écrite par le modèle (défaut) ;"
                              " template = gabarit hors ligne (démo/dégradé)")
-    p_prun.add_argument("--tts", choices=["elevenlabs", "fixture"],
-                        default="elevenlabs")
+    p_prun.add_argument("--tts",
+                        choices=["auto", "openrouter", "elevenlabs", "fixture"],
+                        default="auto")
     p_prun.add_argument("--persona", help="PNG du persona (défaut: placeholder)")
     p_prun.add_argument("--music-cleared", action="store_true", dest="music_cleared",
                         help="attester que l'extrait ne contient pas de musique")
