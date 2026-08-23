@@ -226,6 +226,61 @@ def cmd_moments_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_produce_run(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from . import produce as produce_mod
+    from .assets import generate_placeholder_persona
+    from .reaction import ClaudeReactionWriter, TemplateReactionWriter
+    from .tts import ElevenLabsTTS, FixtureTTS, TTSUnavailable
+
+    settings = load_settings()
+    conn = db.connect(settings.db_path)
+    media_dir = Path(args.media_dir)
+
+    writer = (TemplateReactionWriter() if args.writer == "template"
+              else ClaudeReactionWriter())
+    tts = FixtureTTS() if args.tts == "fixture" else ElevenLabsTTS()
+
+    persona = Path(args.persona) if args.persona else media_dir / "persona.png"
+    if not persona.exists():
+        generate_placeholder_persona(persona)
+
+    try:
+        result = produce_mod.produce_moment(
+            conn, args.moment, writer, tts, media_dir,
+            persona_png=persona, music_cleared=args.music_cleared,
+        )
+    except (TTSUnavailable, ValueError) as exc:
+        print(f"✗ {exc}")
+        return 1
+    status = "✓ prêt pour validation (S8)" if result.ok else "✗ BLOQUÉ par G3"
+    print(f"render #{result.render_id} — {result.out_path}"
+          f" ({result.duration_s:.1f}s) {status}")
+    for issue in result.issues:
+        print(f"   └ {issue}")
+    return 0 if result.ok else 1
+
+
+def cmd_renders_list(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    conn = db.connect(settings.db_path)
+    rows = conn.execute(
+        "SELECT r.*, m.title FROM renders r JOIN moments m ON m.id=r.moment_id"
+        " ORDER BY r.id DESC LIMIT 30"
+    ).fetchall()
+    if not rows:
+        print("aucun render — lancer `produce run --moment N`")
+        return 0
+    for r in rows:
+        ok = "✓" if r["ok"] else "✗"
+        print(f"#{r['id']} {ok} {r['duration_s']:.0f}s [{r['writer']}/{r['tts']}]"
+              f" {r['title']} → {r['path']}")
+        for issue in json.loads(r["issues"] or "[]"):
+            print(f"     └ {issue}")
+    return 0
+
+
 def _fmt_ts(seconds: float) -> str:
     m, s = divmod(int(seconds), 60)
     h, m = divmod(m, 60)
@@ -283,7 +338,11 @@ def main(argv: list[str] | None = None) -> int:
     pipeline_sub = pipeline.add_subparsers(dest="pipeline_command", required=True)
     p_run = pipeline_sub.add_parser("run")
     p_run.add_argument("--episode", type=int, required=True)
-    p_run.add_argument("--scorer", choices=["llm", "heuristic"], default="llm")
+    p_run.add_argument(
+        "--scorer", choices=["llm", "heuristic"], default="llm",
+        help="llm = analyse complète du transcript (défaut, seul chemin de"
+             " qualité) ; heuristic = fallback hors ligne / tests",
+    )
     p_run.add_argument("--top", type=int, default=5)
     p_run.add_argument("--media-dir", dest="media_dir", default="media")
     p_run.set_defaults(func=cmd_pipeline_run)
@@ -294,6 +353,25 @@ def main(argv: list[str] | None = None) -> int:
     p_mlist.add_argument("--episode", type=int)
     p_mlist.add_argument("-v", "--verbose", action="store_true")
     p_mlist.set_defaults(func=cmd_moments_list)
+
+    produce = sub.add_parser("produce", help="stations S4→S7 sur un moment")
+    produce_sub = produce.add_subparsers(dest="produce_command", required=True)
+    p_prun = produce_sub.add_parser("run")
+    p_prun.add_argument("--moment", type=int, required=True)
+    p_prun.add_argument("--writer", choices=["llm", "template"], default="llm",
+                        help="llm = réaction écrite par le modèle (défaut) ;"
+                             " template = gabarit hors ligne (démo/dégradé)")
+    p_prun.add_argument("--tts", choices=["elevenlabs", "fixture"],
+                        default="elevenlabs")
+    p_prun.add_argument("--persona", help="PNG du persona (défaut: placeholder)")
+    p_prun.add_argument("--music-cleared", action="store_true", dest="music_cleared",
+                        help="attester que l'extrait ne contient pas de musique")
+    p_prun.add_argument("--media-dir", dest="media_dir", default="media")
+    p_prun.set_defaults(func=cmd_produce_run)
+
+    renders = sub.add_parser("renders", help="vidéos produites (file S8)")
+    renders_sub = renders.add_subparsers(dest="renders_command", required=True)
+    renders_sub.add_parser("list").set_defaults(func=cmd_renders_list)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -84,6 +84,19 @@ CREATE TABLE IF NOT EXISTS episodes (
     UNIQUE (source_id, guid)
 );
 
+-- S6/S7 : vidéos fabriquées et leur verdict de conformité
+CREATE TABLE IF NOT EXISTS renders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    moment_id INTEGER NOT NULL REFERENCES moments(id),
+    path TEXT NOT NULL,
+    duration_s REAL,
+    tts TEXT,
+    writer TEXT,
+    issues TEXT NOT NULL,                 -- JSON list des manquements G3
+    ok INTEGER NOT NULL,                  -- 1 = prêt pour la validation (S8)
+    created_at TEXT NOT NULL
+);
+
 -- S3 : moments forts détectés (fenêtres candidates au montage)
 CREATE TABLE IF NOT EXISTS moments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -7,7 +7,7 @@ orienté campagnes de clipping rémunérées. Contexte et décisions :
 - **`ARCHITECTURE.md`** — plan d'usine (stations, gates, matrice, phases)
 - **`research/`** — les cinq rapports de recherche détaillés
 
-## État : Sprints 1 & 2 — stations S0 à S3
+## État : Sprints 1 à 3 — stations S0 à S7
 
 **S0 — radar de campagnes** : scan des sources, gate **G1** (budget restant > 60 %,
 CPM ≥ 0,80 $ / 0,40 €, exclusion gambling/crypto, plateformes et audiences
@@ -26,9 +26,18 @@ et scorer Claude (sorties structurées, `ANTHROPIC_API_KEY`,
 modèle via `FACTORY_LLM_MODEL`) ; fenêtres 20–60 s, scores hook/émotion/autonomie,
 gate **G2** (composite ≥ `G2_MIN_SCORE`, défaut 7/10).
 
+**S4 — réaction du persona** : script LLM structuré (hook → interruptions
+datées → outro) qui ANALYSE l'extrait — writers `llm` (défaut) / `template`
+(dégradé) / fixture. **S6 — rendu** : timeline extrait/réaction, TTS
+(ElevenLabs ou fixture), sous-titres ASS deux styles, persona PNG-tuber en
+overlay pendant les réactions, crédit + badges, MP4 vertical 1080×1920 via
+ffmpeg. **S7 — gate G3** : crédit, mention « Collaboration commerciale »
+(campagnes), divulgation persona IA, attestation zéro musique, bornes de
+durée — un manquement = vidéo bloquée avec motifs.
+
 ```bash
-pip install -r requirements.txt
-python -m pytest tests/ -q                            # 26 tests
+pip install -r requirements.txt                       # + ffmpeg requis
+python -m pytest tests/ -q                            # 36 tests
 
 # S0
 python -m factory.cli radar scan|list|add …
@@ -36,8 +45,11 @@ python -m factory.cli radar scan|list|add …
 python -m factory.cli sources add --name "Podcast X" --feed URL --lang fr \
     --auth written --proof "email du 2026-08-12"
 python -m factory.cli episodes scan && python -m factory.cli episodes list
-python -m factory.cli pipeline run --episode 1 [--scorer heuristic]
+python -m factory.cli pipeline run --episode 1        # LLM par défaut
 python -m factory.cli moments list --episode 1 -v
+# S4→S7
+python -m factory.cli produce run --moment 1 --music-cleared
+python -m factory.cli renders list
 ```
 
 Configuration : `FACTORY_DB`, `G1_*`, `G2_MIN_SCORE`, `RADAR_FRESHNESS_WINDOW_H`,
@@ -54,5 +66,4 @@ micro-entreprise avant les premiers revenus.
 
 ## Sprints suivants
 
-3. Production : script de réaction, TTS, PNG-tuber, captions ASS, rendu multi-format (S4–S7)
 4. File de validation + publication multi-plateformes + télémétrie (S8–S10)
