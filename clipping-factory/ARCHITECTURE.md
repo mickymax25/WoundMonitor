@@ -153,3 +153,56 @@ Objectif de funnel : sur ~20 moments détectés/jour, ~8 passent G2, ~5 sont val
 | Ban de l'API tierce ou changement de règles | publication cassée | abstraction de la couche publication (Upload-Post ⇄ Blotato ⇄ manuel), masters archivés |
 | Dérive « AI slop » du format | déclassement algorithmique | le commentaire reste le produit ; revue humaine G4 ; suivi du % de vues organiques |
 | Dépendance à une plateforme | fragilité systémique | tri-plateforme par défaut ; le dataset et le pipeline restent l'actif portable |
+
+---
+
+## 10. Ligne de production n°2 — « actu commentée » (foot, ciné, musique, stars)
+
+Deuxième ligne validée : le persona réagit à l'actualité chaude d'une thématique
+à partir d'un montage d'images et d'infographies — plus d'extrait vidéo d'autrui.
+Elle partage le persona, la voix, S4 (réaction), S7–S10 (conformité, validation,
+publication, télémétrie) avec la ligne n°1 ; seuls l'amont et le rendu changent.
+
+### Stations spécifiques
+
+```
+S1b VEILLE D'ACTU        RSS par thématique (mercato/L'Équipe, actus ciné,
+    (remplace S0/S1)     charts musique, comptes officiels) ; scoring
+                         fraîcheur × ampleur × affinité historique du compte
+S2b SOURCING D'IMAGES    whitelist stricte, provenance tracée en base :
+                         Wikimedia Commons (CC, attribution auto), TMDB
+                         (visuels promo, contexte critique), captures de posts
+                         publics réellement commentés, infographies maison
+                         (stats, timelines, comparatifs — à privilégier)
+S3b CHOIX DE L'ANGLE     le LLM sélectionne le sujet du jour et l'angle
+S6b RENDU SLIDESHOW      Ken Burns ffmpeg ou template HyperFrames (cartes
+                         stats animées, count-up, captions karaoké)
+```
+
+Interdits spécifiques (étendent G3) : photos d'agences (Getty/AFP/Icon Sport)
+reprises telles quelles ; tout extrait musical (on PARLE d'une chanson, on ne
+la joue jamais) ; rumeurs/dénigrement sur les personnes (diffamation) — le
+commentaire reste factuel et d'actualité. Chaque image publiée référence sa
+ligne de provenance (source, licence, attribution) en base.
+
+### Pourquoi cette ligne compte
+
+Composée majoritairement d'infographies maison + images licenciées + commentaire
+substantiel, une vidéo de la ligne n°2 est du contenu ORIGINAL au sens TikTok :
+en > 1 min, elle est éligible à Creator Rewards — la monétisation native que la
+ligne n°1 ne peut pas toucher. Pas d'autorisation de créateur nécessaire. Le
+facteur gagnant est la vitesse sur l'actu (veille → vidéo en minutes), déjà
+notre KPI phare.
+
+### Comptes dédiés par thématique
+
+Un compte = une thématique × une langue (ex. @nova.foot FR, @nova.cine FR,
+puis les miroirs EN). Règles : identité et persona communs mais déclinés ;
+contenu propre à chaque compte (jamais le même fichier sur deux comptes de la
+même plateforme — contrainte déjà en base) ; warm-up 1–2 semaines par compte ;
+montée en charge séquentielle (une thématique validée avant d'ouvrir la
+suivante). Le multi-compte thématique est le multi-compte légitime au sens des
+règles TikTok : pas de tromperie, des contenus distincts par niche.
+
+Ordre de lancement proposé : foot (volume et rythme d'actu maximaux) → ciné →
+musique/stars. La matrice complète devient : thématique × langue × plateforme.
