@@ -62,3 +62,6 @@ frontend/ux-audit/
 # Local experiment scripts
 scripts/apply_int4_quantization.py
 scripts/optimize_time_labels.py
+
+# Vendor agent skills (HyperFrames) — reinstall: npx skills add heygen-com/hyperframes
+.agents/

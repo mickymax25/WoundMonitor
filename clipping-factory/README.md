@@ -87,3 +87,12 @@ micro-entreprise avant les premiers revenus.
 - Génération de variantes (S5) et fenêtres de publication programmées
 - Collecte automatique des métriques via les APIs des plateformes
 - Persona animé (bouche pilotée par l'amplitude audio) et design final
+
+## Rendu premium (station S6)
+
+La suite de skills HyperFrames (HeyGen) est utilisée pour l'habillage motion design
+rendu localement. Installation (verrouillée par `skills-lock.json` à la racine) :
+
+```bash
+npx skills add heygen-com/hyperframes
+```
