@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>Podcast Test FR</title>
+    <item>
+      <title>Épisode 42 — L'argent des créateurs</title>
+      <guid>ep-42</guid>
+      <pubDate>Fri, 21 Aug 2026 06:00:00 +0000</pubDate>
+      <itunes:duration>1:02:30</itunes:duration>
+      <enclosure url="https://cdn.example.com/ep42.mp3" type="audio/mpeg" length="1000"/>
+    </item>
+    <item>
+      <title>Épisode 41 — Spécial questions</title>
+      <guid>ep-41</guid>
+      <pubDate>Fri, 14 Aug 2026 06:00:00 +0000</pubDate>
+      <itunes:duration>3600</itunes:duration>
+      <enclosure url="https://cdn.example.com/ep41.mp3" type="audio/mpeg" length="1000"/>
+    </item>
+    <item>
+      <title>Annonce sans audio</title>
+      <guid>ep-40</guid>
+    </item>
+  </channel>
+</rss>

@@ -1,9 +1,13 @@
 """CLI de l'usine — `python -m factory.cli <commande>`.
 
-Commandes du Sprint 1 (station S0) :
-  radar scan [--manual fichier.json]   scanne les sources et met la base à jour
-  radar list [--all]                   campagnes classées (par défaut : G1 ✓ seulement)
-  radar add                            ajoute une campagne repérée à la main
+Sprint 1 (station S0) :
+  radar scan | list | add              campagnes rémunérées, gate G1, scoring
+
+Sprint 2 (stations S1–S3) :
+  sources add | list                   sources de contenu AUTORISÉES (RSS podcast…)
+  episodes scan | list                 découverte de nouveaux épisodes
+  pipeline run --episode N             fetch → transcription → moments (gate G2)
+  moments list [--episode N]           moments détectés, classés
 """
 
 from __future__ import annotations
@@ -96,6 +100,138 @@ def cmd_add(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sources_add(args: argparse.Namespace) -> int:
+    from . import ingest
+
+    settings = load_settings()
+    conn = db.connect(settings.db_path)
+    source_id = ingest.add_source(
+        conn,
+        kind="podcast_rss",
+        name=args.name,
+        feed_url=args.feed,
+        language=args.lang,
+        authorization_kind=args.auth,
+        authorization_proof=args.proof,
+        campaign_key=args.campaign,
+    )
+    print(f"source #{source_id} ajoutée : {args.name} ({args.lang}, auth={args.auth})")
+    return 0
+
+
+def cmd_sources_list(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    conn = db.connect(settings.db_path)
+    rows = conn.execute("SELECT * FROM content_sources ORDER BY id").fetchall()
+    if not rows:
+        print("aucune source — `sources add --name … --feed … --lang … --auth … --proof …`")
+        return 0
+    for r in rows:
+        active = "" if r["active"] else " [inactif]"
+        print(f"#{r['id']} [{r['language']}] {r['name']} — auth {r['authorization_kind']}"
+              f" ({r['authorization_proof']}){active}")
+    return 0
+
+
+def cmd_episodes_scan(args: argparse.Namespace) -> int:
+    from . import ingest
+
+    settings = load_settings()
+    conn = db.connect(settings.db_path)
+    report = ingest.scan_sources(conn)
+    print(f"{report['sources']} source(s) scannée(s), "
+          f"{report['episodes_new']} nouvel(s) épisode(s), {report['errors']} erreur(s)")
+    return 0
+
+
+def cmd_episodes_list(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    conn = db.connect(settings.db_path)
+    rows = conn.execute(
+        "SELECT e.*, s.name AS source_name, s.language FROM episodes e"
+        " JOIN content_sources s ON s.id=e.source_id ORDER BY e.id DESC LIMIT 30"
+    ).fetchall()
+    if not rows:
+        print("aucun épisode — lancer `episodes scan`")
+        return 0
+    for r in rows:
+        dur = f" {r['duration_s'] / 60:.0f}min" if r["duration_s"] else ""
+        print(f"#{r['id']} [{r['status']:>11}] [{r['language']}]{dur} "
+              f"{r['source_name']} — {r['title']}")
+    return 0
+
+
+def cmd_pipeline_run(args: argparse.Namespace) -> int:
+    from . import ingest, moments as moments_mod, transcribe as transcribe_mod
+
+    settings = load_settings()
+    conn = db.connect(settings.db_path)
+    media_dir = args.media_dir
+    ep_id = args.episode
+
+    row = conn.execute("SELECT e.*, s.language FROM episodes e"
+                       " JOIN content_sources s ON s.id=e.source_id"
+                       " WHERE e.id=?", (ep_id,)).fetchone()
+    if row is None:
+        print(f"épisode {ep_id} inconnu")
+        return 1
+
+    try:
+        if row["status"] == "new":
+            print(f"S1 téléchargement… ({row['audio_url']})")
+            ingest.fetch_audio(conn, ep_id, media_dir)
+        if conn.execute("SELECT status FROM episodes WHERE id=?", (ep_id,)
+                        ).fetchone()["status"] == "fetched":
+            transcriber = transcribe_mod.GroqTranscriber()
+            print(f"S2 transcription ({transcriber.name})…")
+            transcribe_mod.transcribe_episode(conn, ep_id, transcriber, media_dir)
+
+        tr_path = conn.execute("SELECT transcript_path FROM episodes WHERE id=?",
+                               (ep_id,)).fetchone()["transcript_path"]
+        segments = transcribe_mod.load_transcript(__import__("pathlib").Path(tr_path))
+        scorer = (moments_mod.HeuristicScorer() if args.scorer == "heuristic"
+                  else moments_mod.ClaudeScorer())
+        print(f"S3 détection des moments ({scorer.name})…")
+        candidates = scorer.find_moments(segments, row["language"], top_n=args.top)
+        passed = moments_mod.save_moments(conn, ep_id, candidates, scorer.name)
+        print(f"{len(candidates)} moment(s) détecté(s), {passed} passent G2"
+              f" (seuil {moments_mod.g2_min_score()})")
+        return 0
+    except (transcribe_mod.TranscriberUnavailable, ValueError) as exc:
+        print(f"✗ {exc}")
+        return 1
+
+
+def cmd_moments_list(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    conn = db.connect(settings.db_path)
+    q = ("SELECT m.*, e.title AS ep_title FROM moments m"
+         " JOIN episodes e ON e.id=m.episode_id")
+    params: tuple = ()
+    if args.episode:
+        q += " WHERE m.episode_id=?"
+        params = (args.episode,)
+    q += " ORDER BY m.score DESC"
+    rows = conn.execute(q, params).fetchall()
+    if not rows:
+        print("aucun moment — lancer `pipeline run --episode N`")
+        return 0
+    for r in rows:
+        g2 = "✓" if r["g2_passed"] else "✗"
+        print(f"{r['score']:>4}/10 G2 {g2}  [{_fmt_ts(r['t_start'])}–{_fmt_ts(r['t_end'])}]"
+              f" {r['title']}")
+        if args.verbose:
+            print(f"          hook {r['score_hook']} · émotion {r['score_emotion']}"
+                  f" · autonomie {r['score_autonomy']} — {r['justification']}")
+    return 0
+
+
+def _fmt_ts(seconds: float) -> str:
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="factory")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -122,6 +258,42 @@ def main(argv: list[str] | None = None) -> int:
     p_add.add_argument("--url")
     p_add.add_argument("--id")
     p_add.set_defaults(func=cmd_add)
+
+    sources = sub.add_parser("sources", help="station S1 — sources autorisées")
+    sources_sub = sources.add_subparsers(dest="sources_command", required=True)
+    p_sadd = sources_sub.add_parser("add")
+    p_sadd.add_argument("--name", required=True)
+    p_sadd.add_argument("--feed", required=True, help="URL du flux RSS")
+    p_sadd.add_argument("--lang", required=True, choices=["fr", "en"])
+    p_sadd.add_argument("--auth", required=True,
+                        choices=["campaign", "written", "native"])
+    p_sadd.add_argument("--proof", required=True,
+                        help="preuve d'autorisation (email du…, URL campagne…)")
+    p_sadd.add_argument("--campaign", help="clé de campagne liée (source:id)")
+    p_sadd.set_defaults(func=cmd_sources_add)
+    p_slist = sources_sub.add_parser("list")
+    p_slist.set_defaults(func=cmd_sources_list)
+
+    episodes = sub.add_parser("episodes", help="découverte d'épisodes")
+    episodes_sub = episodes.add_subparsers(dest="episodes_command", required=True)
+    episodes_sub.add_parser("scan").set_defaults(func=cmd_episodes_scan)
+    episodes_sub.add_parser("list").set_defaults(func=cmd_episodes_list)
+
+    pipeline = sub.add_parser("pipeline", help="stations S1→S3 sur un épisode")
+    pipeline_sub = pipeline.add_subparsers(dest="pipeline_command", required=True)
+    p_run = pipeline_sub.add_parser("run")
+    p_run.add_argument("--episode", type=int, required=True)
+    p_run.add_argument("--scorer", choices=["llm", "heuristic"], default="llm")
+    p_run.add_argument("--top", type=int, default=5)
+    p_run.add_argument("--media-dir", dest="media_dir", default="media")
+    p_run.set_defaults(func=cmd_pipeline_run)
+
+    moments = sub.add_parser("moments", help="moments forts détectés")
+    moments_sub = moments.add_subparsers(dest="moments_command", required=True)
+    p_mlist = moments_sub.add_parser("list")
+    p_mlist.add_argument("--episode", type=int)
+    p_mlist.add_argument("-v", "--verbose", action="store_true")
+    p_mlist.set_defaults(func=cmd_moments_list)
 
     args = parser.parse_args(argv)
     return args.func(args)

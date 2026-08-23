@@ -7,32 +7,42 @@ orienté campagnes de clipping rémunérées. Contexte et décisions :
 - **`ARCHITECTURE.md`** — plan d'usine (stations, gates, matrice, phases)
 - **`research/`** — les cinq rapports de recherche détaillés
 
-## État : Sprint 1 — Station S0, radar de campagnes
+## État : Sprints 1 & 2 — stations S0 à S3
 
-Le radar scanne les sources de campagnes, normalise, applique le gate **G1**
-(budget restant > 60 %, CPM ≥ 0,80 $ / 0,40 €, exclusion gambling/crypto,
-plateformes et audiences servables) et classe par score
-(fraîcheur 45 % · budget 30 % · CPM 25 %).
+**S0 — radar de campagnes** : scan des sources, gate **G1** (budget restant > 60 %,
+CPM ≥ 0,80 $ / 0,40 €, exclusion gambling/crypto, plateformes et audiences
+servables), score de priorité (fraîcheur 45 % · budget 30 % · CPM 25 %).
+
+**S1 — sourcing autorisé** : sources de contenu avec autorisation + preuve
+obligatoires (règle whitelist du dossier), découverte de nouveaux épisodes par
+RSS, téléchargement des enclosures.
+
+**S2 — transcription** : Whisper large-v3-turbo via Groq (`GROQ_API_KEY`,
+~0,04 $/h) ou transcript fixture pour le rejeu hors ligne ; segments
+horodatés JSON.
+
+**S3 — détection des moments** : scorer heuristique FR/EN sans API (baseline)
+et scorer Claude (sorties structurées, `ANTHROPIC_API_KEY`,
+modèle via `FACTORY_LLM_MODEL`) ; fenêtres 20–60 s, scores hook/émotion/autonomie,
+gate **G2** (composite ≥ `G2_MIN_SCORE`, défaut 7/10).
 
 ```bash
 pip install -r requirements.txt
-python -m pytest tests/ -q          # tests
+python -m pytest tests/ -q                            # 26 tests
 
-python -m factory.cli radar scan                      # scan des sources
-python -m factory.cli radar list                      # campagnes G1 ✓, classées
-python -m factory.cli radar list --all                # tout, avec motifs de rejet
-python -m factory.cli radar add --name "Clips podcast X" \
-    --cpm 1.5 --currency USD --budget-total 5000 \
-    --platforms tiktok,instagram --languages en       # saisie manuelle (jour 1)
+# S0
+python -m factory.cli radar scan|list|add …
+# S1→S3
+python -m factory.cli sources add --name "Podcast X" --feed URL --lang fr \
+    --auth written --proof "email du 2026-08-12"
+python -m factory.cli episodes scan && python -m factory.cli episodes list
+python -m factory.cli pipeline run --episode 1 [--scorer heuristic]
+python -m factory.cli moments list --episode 1 -v
 ```
 
-Sources branchées :
-- **manual** — saisie CLI ou fichier JSON (`radar scan --manual campagnes.json`) : utilisable sans aucun compte.
-- **whop** — API officielle, nécessite `WHOP_API_KEY` (l'endpoint des campagnes est configurable via `WHOP_CAMPAIGNS_ENDPOINT`, à valider sur un compte réel — le listing public est une app JS non scrapable proprement).
-- à venir : Vyro, clip.farm, plateformes FR (adaptateurs `factory/radar/`, interface `base.SourceAdapter`).
-
-Configuration par variables d'environnement : `FACTORY_DB`, `G1_MIN_BUDGET_RATIO`,
-`G1_MIN_CPM_USD`, `G1_MIN_CPM_EUR`, `RADAR_FRESHNESS_WINDOW_H`.
+Configuration : `FACTORY_DB`, `G1_*`, `G2_MIN_SCORE`, `RADAR_FRESHNESS_WINDOW_H`,
+`WHOP_API_KEY`/`WHOP_CAMPAIGNS_ENDPOINT`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`,
+`FACTORY_LLM_MODEL`.
 
 ## Prérequis côté opérateur (hors code)
 
@@ -44,6 +54,5 @@ micro-entreprise avant les premiers revenus.
 
 ## Sprints suivants
 
-2. Cœur du pipeline : ingestion autorisée → transcription → détection des moments (S1–S3)
-3. Production : réaction, TTS, PNG-tuber, captions, rendu multi-format (S4–S7)
-4. File de validation + publication + télémétrie (S8–S10)
+3. Production : script de réaction, TTS, PNG-tuber, captions ASS, rendu multi-format (S4–S7)
+4. File de validation + publication multi-plateformes + télémétrie (S8–S10)

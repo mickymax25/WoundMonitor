@@ -51,6 +51,55 @@ CREATE TABLE IF NOT EXISTS scan_runs (
     campaigns_new INTEGER DEFAULT 0,
     errors TEXT                           -- JSON list
 );
+
+-- S1 : sources de contenu autorisées (podcasts RSS, chaînes, assets de campagne)
+CREATE TABLE IF NOT EXISTS content_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,                   -- 'podcast_rss' | 'campaign_asset'
+    name TEXT NOT NULL,
+    feed_url TEXT,
+    language TEXT NOT NULL,               -- 'fr' | 'en'
+    authorization_kind TEXT NOT NULL,     -- 'campaign' | 'written' | 'native'
+    authorization_proof TEXT NOT NULL,    -- référence de la preuve (email, URL campagne…)
+    campaign_key TEXT,                    -- lien éventuel vers campaigns.key
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    UNIQUE (kind, feed_url, name)
+);
+
+-- S1 : épisodes découverts, avec leur avancement dans le pipeline
+CREATE TABLE IF NOT EXISTS episodes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id INTEGER NOT NULL REFERENCES content_sources(id),
+    guid TEXT NOT NULL,
+    title TEXT NOT NULL,
+    audio_url TEXT,
+    published_at TEXT,
+    duration_s REAL,
+    status TEXT NOT NULL DEFAULT 'new',   -- new → fetched → transcribed → scored | failed
+    audio_path TEXT,
+    transcript_path TEXT,
+    error TEXT,
+    discovered_at TEXT NOT NULL,
+    UNIQUE (source_id, guid)
+);
+
+-- S3 : moments forts détectés (fenêtres candidates au montage)
+CREATE TABLE IF NOT EXISTS moments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    episode_id INTEGER NOT NULL REFERENCES episodes(id),
+    t_start REAL NOT NULL,
+    t_end REAL NOT NULL,
+    title TEXT,
+    score_hook REAL,
+    score_emotion REAL,
+    score_autonomy REAL,
+    score REAL NOT NULL,                  -- composite /10
+    justification TEXT,
+    scorer TEXT NOT NULL,                 -- 'heuristic' | nom du modèle LLM
+    g2_passed INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
