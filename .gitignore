@@ -65,3 +65,8 @@ scripts/optimize_time_labels.py
 
 # Vendor agent skills (HyperFrames) — reinstall: npx skills add heygen-com/hyperframes
 .agents/
+
+# Vendor agent skills (installed via: npx skills add heygen-com/hyperframes)
+.agents/
+.claude/skills/
+node_modules/
