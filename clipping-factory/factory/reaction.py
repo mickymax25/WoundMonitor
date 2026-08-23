@@ -119,16 +119,84 @@ class ClaudeReactionWriter:
         )
         out = response.parsed_output
         clip_len = (clip_segments[-1].end - t0) if clip_segments else 0.0
-        interruptions = [
-            Interruption(at_s=max(0.0, min(i.at_s, clip_len)), text=i.text.strip())
-            for i in out.interruptions[:2]
-            if i.text.strip()
-        ]
-        interruptions.sort(key=lambda i: i.at_s)
-        return ReactionScript(
-            hook=out.hook.strip(),
-            interruptions=interruptions,
-            outro=out.outro.strip(),
+        return build_script(
+            out.hook,
+            [{"at_s": i.at_s, "text": i.text} for i in out.interruptions],
+            out.outro,
+            clip_len,
+        )
+
+
+def build_script(
+    hook: str, interruptions: list[dict], outro: str, clip_len: float
+) -> ReactionScript:
+    """Normalise une sortie LLM : bornes clampées, tri, max 2 interruptions."""
+    cleaned = [
+        Interruption(
+            at_s=max(0.0, min(float(i["at_s"]), clip_len)),
+            text=str(i["text"]).strip(),
+        )
+        for i in interruptions[:2]
+        if str(i["text"]).strip()
+    ]
+    cleaned.sort(key=lambda i: i.at_s)
+    return ReactionScript(
+        hook=str(hook).strip(), interruptions=cleaned, outro=str(outro).strip()
+    )
+
+
+_SCRIPT_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "hook": {"type": "string"},
+        "interruptions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "at_s": {"type": "number"},
+                    "text": {"type": "string"},
+                },
+                "required": ["at_s", "text"],
+                "additionalProperties": False,
+            },
+        },
+        "outro": {"type": "string"},
+    },
+    "required": ["hook", "interruptions", "outro"],
+    "additionalProperties": False,
+}
+
+
+class OpenRouterReactionWriter:
+    """Même écriture que ClaudeReactionWriter, via OpenRouter."""
+
+    def __init__(self, persona: str = DEFAULT_PERSONA, client=None):
+        from .llm import OpenRouterClient
+
+        self.persona = persona
+        self.client = client or OpenRouterClient()
+        self.name = f"openrouter:{self.client.model}"
+
+    def write(
+        self, clip_segments: list[Segment], language: str, moment_title: str
+    ) -> ReactionScript:
+        t0 = clip_segments[0].start if clip_segments else 0.0
+        excerpt = "\n".join(
+            f"[{s.start - t0:.1f}–{s.end - t0:.1f}] {s.text}" for s in clip_segments
+        )
+        data = self.client.complete_json(
+            system=_SYSTEM_PROMPT.format(persona=self.persona),
+            user=(
+                f"Langue : {language}. Titre du moment : {moment_title}\n\n"
+                f"Extrait horodaté (secondes relatives) :\n{excerpt}"
+            ),
+            schema=_SCRIPT_JSON_SCHEMA,
+        )
+        clip_len = (clip_segments[-1].end - t0) if clip_segments else 0.0
+        return build_script(
+            data.get("hook", ""), data.get("interruptions", []),
+            data.get("outro", ""), clip_len,
         )
 
 

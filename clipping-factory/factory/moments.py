@@ -221,23 +221,89 @@ class ClaudeScorer:
             }],
             output_format=Selection,
         )
-        clamp = lambda v: max(0.0, min(10.0, float(v)))
-        end_of_audio = segments[-1].end if segments else 0.0
-        out: list[MomentCandidate] = []
-        for m in response.parsed_output.moments:
-            start = max(0.0, min(m.start_s, end_of_audio))
-            end = max(0.0, min(m.end_s, end_of_audio))
-            if end - start < MIN_LEN_S / 2 or end - start > HARD_MAX_LEN_S:
-                continue
-            out.append(
-                MomentCandidate(
-                    t_start=start, t_end=end, title=m.title[:120],
-                    hook=clamp(m.hook), emotion=clamp(m.emotion),
-                    autonomy=clamp(m.autonomy),
-                    justification=m.justification,
-                )
+        raw = [
+            dict(start_s=m.start_s, end_s=m.end_s, title=m.title, hook=m.hook,
+                 emotion=m.emotion, autonomy=m.autonomy,
+                 justification=m.justification)
+            for m in response.parsed_output.moments
+        ]
+        return postprocess_candidates(raw, segments, top_n)
+
+
+def postprocess_candidates(
+    raw: list[dict], segments: list[Segment], top_n: int
+) -> list[MomentCandidate]:
+    """Normalise la sortie d'un LLM : bornes clampées, scores /10, tailles."""
+    clamp = lambda v: max(0.0, min(10.0, float(v)))
+    end_of_audio = segments[-1].end if segments else 0.0
+    out: list[MomentCandidate] = []
+    for m in raw:
+        start = max(0.0, min(float(m["start_s"]), end_of_audio))
+        end = max(0.0, min(float(m["end_s"]), end_of_audio))
+        if end - start < MIN_LEN_S / 2 or end - start > HARD_MAX_LEN_S:
+            continue
+        out.append(
+            MomentCandidate(
+                t_start=start, t_end=end, title=str(m["title"])[:120],
+                hook=clamp(m["hook"]), emotion=clamp(m["emotion"]),
+                autonomy=clamp(m["autonomy"]),
+                justification=str(m["justification"]),
             )
-        return out[:top_n]
+        )
+    return out[:top_n]
+
+
+_MOMENTS_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "moments": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "start_s": {"type": "number"},
+                    "end_s": {"type": "number"},
+                    "title": {"type": "string"},
+                    "hook": {"type": "number"},
+                    "emotion": {"type": "number"},
+                    "autonomy": {"type": "number"},
+                    "justification": {"type": "string"},
+                },
+                "required": ["start_s", "end_s", "title", "hook", "emotion",
+                              "autonomy", "justification"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["moments"],
+    "additionalProperties": False,
+}
+
+
+class OpenRouterScorer:
+    """Même analyse que ClaudeScorer, via OpenRouter (OPENROUTER_API_KEY)."""
+
+    def __init__(self, client=None):
+        from .llm import OpenRouterClient
+
+        self.client = client or OpenRouterClient()
+        self.name = f"openrouter:{self.client.model}"
+
+    def find_moments(
+        self, segments: list[Segment], language: str, top_n: int = 5
+    ) -> list[MomentCandidate]:
+        transcript = "\n".join(
+            f"[{s.start:.1f}–{s.end:.1f}] {s.text}" for s in segments
+        )
+        data = self.client.complete_json(
+            system=_SYSTEM_PROMPT,
+            user=(
+                f"Langue du transcript : {language}. Sélectionne les "
+                f"{top_n} meilleurs moments.\n\n{transcript}"
+            ),
+            schema=_MOMENTS_JSON_SCHEMA,
+        )
+        return postprocess_candidates(data.get("moments", []), segments, top_n)
 
 
 # ---------------------------------------------------------------------------

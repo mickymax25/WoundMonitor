@@ -189,8 +189,14 @@ def cmd_pipeline_run(args: argparse.Namespace) -> int:
         tr_path = conn.execute("SELECT transcript_path FROM episodes WHERE id=?",
                                (ep_id,)).fetchone()["transcript_path"]
         segments = transcribe_mod.load_transcript(__import__("pathlib").Path(tr_path))
-        scorer = (moments_mod.HeuristicScorer() if args.scorer == "heuristic"
-                  else moments_mod.ClaudeScorer())
+        from .llm import LLMUnavailable, pick_scorer
+
+        try:
+            scorer = (moments_mod.HeuristicScorer() if args.scorer == "heuristic"
+                      else pick_scorer())
+        except LLMUnavailable as exc:
+            print(f"✗ {exc}")
+            return 1
         print(f"S3 détection des moments ({scorer.name})…")
         candidates = scorer.find_moments(segments, row["language"], top_n=args.top)
         passed = moments_mod.save_moments(conn, ep_id, candidates, scorer.name)
@@ -231,15 +237,20 @@ def cmd_produce_run(args: argparse.Namespace) -> int:
 
     from . import produce as produce_mod
     from .assets import generate_placeholder_persona
-    from .reaction import ClaudeReactionWriter, TemplateReactionWriter
+    from .llm import LLMUnavailable, pick_writer
+    from .reaction import TemplateReactionWriter
     from .tts import ElevenLabsTTS, FixtureTTS, TTSUnavailable
 
     settings = load_settings()
     conn = db.connect(settings.db_path)
     media_dir = Path(args.media_dir)
 
-    writer = (TemplateReactionWriter() if args.writer == "template"
-              else ClaudeReactionWriter())
+    try:
+        writer = (TemplateReactionWriter() if args.writer == "template"
+                  else pick_writer())
+    except LLMUnavailable as exc:
+        print(f"✗ {exc}")
+        return 1
     tts = FixtureTTS() if args.tts == "fixture" else ElevenLabsTTS()
 
     persona = Path(args.persona) if args.persona else media_dir / "persona.png"
