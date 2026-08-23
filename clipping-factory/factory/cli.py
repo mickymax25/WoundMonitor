@@ -281,6 +281,101 @@ def cmd_renders_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_queue_list(args: argparse.Namespace) -> int:
+    from . import review
+
+    conn = db.connect(load_settings().db_path)
+    rows = review.pending(conn)
+    if not rows:
+        print("file vide — lancer `produce run`")
+        return 0
+    for r in rows:
+        print(f"#{r['id']} {r['score']}/10 {r['duration_s']:.0f}s [{r['language']}]"
+              f" {r['source_name']} — {r['title']}")
+    return 0
+
+
+def cmd_queue_review(args: argparse.Namespace) -> int:
+    from . import review
+
+    conn = db.connect(load_settings().db_path)
+    try:
+        if args.queue_command == "approve":
+            review.approve(conn, args.render, args.note)
+            print(f"render #{args.render} approuvé (G4 ✓)")
+        else:
+            review.reject(conn, args.render, args.note or "")
+            print(f"render #{args.render} rejeté")
+    except ValueError as exc:
+        print(f"✗ {exc}")
+        return 1
+    return 0
+
+
+def cmd_publish_run(args: argparse.Namespace) -> int:
+    from .publish import (
+        DryRunPublisher, PublisherUnavailable, UploadPostPublisher, publish_render,
+    )
+
+    conn = db.connect(load_settings().db_path)
+    publisher = (DryRunPublisher() if args.publisher == "dryrun"
+                 else UploadPostPublisher())
+    try:
+        results = publish_render(
+            conn, args.render, publisher,
+            args.platforms.split(","), args.account, title=args.title,
+        )
+    except (ValueError, PublisherUnavailable) as exc:
+        print(f"✗ {exc}")
+        return 1
+    for r in results:
+        print(f"✓ {r.platform}: {r.url or r.external_id} (via {publisher.name})")
+    return 0
+
+
+def cmd_metrics_record(args: argparse.Namespace) -> int:
+    from . import telemetry
+
+    conn = db.connect(load_settings().db_path)
+    try:
+        telemetry.record(
+            conn, args.publication, args.at, args.views,
+            likes=args.likes, comments=args.comments, proof_path=args.proof,
+        )
+    except ValueError as exc:
+        print(f"✗ {exc}")
+        return 1
+    print(f"relevé enregistré : publication #{args.publication} @{args.at}h"
+          f" = {args.views} vues")
+    return 0
+
+
+def cmd_stats(args: argparse.Namespace) -> int:
+    from . import telemetry
+
+    conn = db.connect(load_settings().db_path)
+    s = telemetry.compute_stats(conn)
+    pct = lambda v: f"{v:.0%}" if v is not None else "n/a"
+    print(f"épisodes scorés     : {s.episodes_scored}")
+    print(f"moments détectés    : {s.moments_detected} (G2 : {pct(s.g2_pass_rate)})")
+    print(f"renders conformes   : {s.renders_ok} (approbation : {pct(s.approval_rate)})")
+    print(f"publications        : {s.publications}")
+    for platform, views in sorted(s.views_by_platform.items()):
+        print(f"  vues {platform:<10}: {views}")
+    for source, views in sorted(s.views_by_source.items()):
+        print(f"  vues {source:<10}: {views}")
+    return 0
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    from .webapp import create_app
+
+    uvicorn.run(create_app(), host=args.host, port=args.port)
+    return 0
+
+
 def _fmt_ts(seconds: float) -> str:
     m, s = divmod(int(seconds), 60)
     h, m = divmod(m, 60)
@@ -372,6 +467,46 @@ def main(argv: list[str] | None = None) -> int:
     renders = sub.add_parser("renders", help="vidéos produites (file S8)")
     renders_sub = renders.add_subparsers(dest="renders_command", required=True)
     renders_sub.add_parser("list").set_defaults(func=cmd_renders_list)
+
+    queue = sub.add_parser("queue", help="station S8 — validation humaine (G4)")
+    queue_sub = queue.add_subparsers(dest="queue_command", required=True)
+    queue_sub.add_parser("list").set_defaults(func=cmd_queue_list)
+    for action in ("approve", "reject"):
+        p_q = queue_sub.add_parser(action)
+        p_q.add_argument("--render", type=int, required=True)
+        p_q.add_argument("--note", help="obligatoire pour un rejet")
+        p_q.set_defaults(func=cmd_queue_review)
+
+    publish = sub.add_parser("publish", help="station S9 — publication")
+    publish_sub = publish.add_subparsers(dest="publish_command", required=True)
+    p_pub = publish_sub.add_parser("run")
+    p_pub.add_argument("--render", type=int, required=True)
+    p_pub.add_argument("--platforms", default="tiktok,instagram,youtube")
+    p_pub.add_argument("--account", required=True, help="handle du compte")
+    p_pub.add_argument("--publisher", choices=["uploadpost", "dryrun"],
+                       default="uploadpost")
+    p_pub.add_argument("--title")
+    p_pub.set_defaults(func=cmd_publish_run)
+
+    metrics = sub.add_parser("metrics", help="station S10 — relevés de vues")
+    metrics_sub = metrics.add_subparsers(dest="metrics_command", required=True)
+    p_rec = metrics_sub.add_parser("record")
+    p_rec.add_argument("--publication", type=int, required=True)
+    p_rec.add_argument("--at", type=int, required=True, choices=[24, 72, 168])
+    p_rec.add_argument("--views", type=int, required=True)
+    p_rec.add_argument("--likes", type=int)
+    p_rec.add_argument("--comments", type=int)
+    p_rec.add_argument("--proof", help="chemin de la capture d'écran (preuve)")
+    p_rec.set_defaults(func=cmd_metrics_record)
+
+    sub.add_parser("stats", help="KPIs du poste de pilotage").set_defaults(
+        func=cmd_stats
+    )
+
+    serve = sub.add_parser("serve", help="interface web de validation (S8)")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8787)
+    serve.set_defaults(func=cmd_serve)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -94,7 +94,42 @@ CREATE TABLE IF NOT EXISTS renders (
     writer TEXT,
     issues TEXT NOT NULL,                 -- JSON list des manquements G3
     ok INTEGER NOT NULL,                  -- 1 = prêt pour la validation (S8)
+    checksum TEXT,                        -- sha256 du fichier rendu
+    review_status TEXT NOT NULL DEFAULT 'pending',  -- pending|approved|rejected (G4)
+    reviewed_at TEXT,
+    review_note TEXT,
     created_at TEXT NOT NULL
+);
+
+-- S9 : publications effectives, une ligne par (render, plateforme, compte)
+CREATE TABLE IF NOT EXISTS publications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    render_id INTEGER NOT NULL REFERENCES renders(id),
+    platform TEXT NOT NULL,               -- tiktok | instagram | youtube
+    account TEXT NOT NULL,
+    publisher TEXT NOT NULL,              -- uploadpost | dryrun | manual
+    external_id TEXT,
+    url TEXT,
+    checksum TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'published',
+    published_at TEXT NOT NULL
+);
+-- règle d'or ARCHITECTURE.md §4 : jamais deux fois le même fichier
+-- sur la même plateforme pour le même compte
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_pub_checksum
+    ON publications (checksum, platform, account);
+
+-- S10 : relevés de vues aux échéances (preuves de payout)
+CREATE TABLE IF NOT EXISTS metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    publication_id INTEGER NOT NULL REFERENCES publications(id),
+    at_hours INTEGER NOT NULL,            -- 24 | 72 | 168
+    views INTEGER NOT NULL,
+    likes INTEGER,
+    comments INTEGER,
+    proof_path TEXT,                      -- capture d'écran pour la campagne
+    recorded_at TEXT NOT NULL,
+    UNIQUE (publication_id, at_hours)
 );
 
 -- S3 : moments forts détectés (fenêtres candidates au montage)
@@ -116,10 +151,23 @@ CREATE TABLE IF NOT EXISTS moments (
 """
 
 
+_MIGRATIONS = (
+    "ALTER TABLE renders ADD COLUMN checksum TEXT",
+    "ALTER TABLE renders ADD COLUMN review_status TEXT NOT NULL DEFAULT 'pending'",
+    "ALTER TABLE renders ADD COLUMN reviewed_at TEXT",
+    "ALTER TABLE renders ADD COLUMN review_note TEXT",
+)
+
+
 def connect(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    for migration in _MIGRATIONS:  # bases créées avant l'ajout des colonnes S8
+        try:
+            conn.execute(migration)
+        except sqlite3.OperationalError:
+            pass
     return conn
 
 

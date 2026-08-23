@@ -7,7 +7,7 @@ orienté campagnes de clipping rémunérées. Contexte et décisions :
 - **`ARCHITECTURE.md`** — plan d'usine (stations, gates, matrice, phases)
 - **`research/`** — les cinq rapports de recherche détaillés
 
-## État : Sprints 1 à 3 — stations S0 à S7
+## État : chaîne complète — stations S0 à S10
 
 **S0 — radar de campagnes** : scan des sources, gate **G1** (budget restant > 60 %,
 CPM ≥ 0,80 $ / 0,40 €, exclusion gambling/crypto, plateformes et audiences
@@ -35,9 +35,18 @@ ffmpeg. **S7 — gate G3** : crédit, mention « Collaboration commerciale »
 (campagnes), divulgation persona IA, attestation zéro musique, bornes de
 durée — un manquement = vidéo bloquée avec motifs.
 
+**S8 — validation humaine (G4)** : file des clips conformes, approbation/rejet
+motivé, en CLI (`queue`) ou via l'interface web locale (`serve` →
+http://127.0.0.1:8787 : lecteur vidéo, un clic pour approuver/rejeter/publier).
+**S9 — publication** : tri-plateforme (TikTok + Reels + Shorts) via Upload-Post
+(`UPLOADPOST_API_KEY`) ou mode dryrun ; publication refusée sans approbation
+G4, et l'index unique (checksum × plateforme × compte) rend la duplication
+intra-plateforme impossible au niveau base. **S10 — télémétrie** : relevés de
+vues aux échéances 24 h/72 h/7 j avec preuve (capture), KPIs (`stats`).
+
 ```bash
 pip install -r requirements.txt                       # + ffmpeg requis
-python -m pytest tests/ -q                            # 36 tests
+python -m pytest tests/ -q                            # 48 tests
 
 # S0
 python -m factory.cli radar scan|list|add …
@@ -50,6 +59,14 @@ python -m factory.cli moments list --episode 1 -v
 # S4→S7
 python -m factory.cli produce run --moment 1 --music-cleared
 python -m factory.cli renders list
+# S8→S10
+python -m factory.cli serve                           # interface de validation
+python -m factory.cli queue list|approve|reject …
+python -m factory.cli publish run --render 1 --account @moncompte \
+    --platforms tiktok,instagram,youtube [--publisher dryrun]
+python -m factory.cli metrics record --publication 1 --at 24 --views 1200 \
+    --proof proofs/p1.png
+python -m factory.cli stats
 ```
 
 Configuration : `FACTORY_DB`, `G1_*`, `G2_MIN_SCORE`, `RADAR_FRESHNESS_WINDOW_H`,
@@ -64,6 +81,9 @@ plateformes de campagnes ; compte TikTok/Instagram/YouTube dédiés (warm-up
 clés Groq (transcription), LLM et TTS pour les stations suivantes ;
 micro-entreprise avant les premiers revenus.
 
-## Sprints suivants
+## Prochaines évolutions
 
-4. File de validation + publication multi-plateformes + télémétrie (S8–S10)
+- Adaptateurs radar supplémentaires (Vyro, clip.farm, plateformes FR — via Playwright si nécessaire)
+- Génération de variantes (S5) et fenêtres de publication programmées
+- Collecte automatique des métriques via les APIs des plateformes
+- Persona animé (bouche pilotée par l'amplitude audio) et design final

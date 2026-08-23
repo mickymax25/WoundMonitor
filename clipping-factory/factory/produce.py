@@ -94,13 +94,15 @@ def produce_moment(
         authorization_kind=row["authorization_kind"],
     ))
 
+    from .publish import file_checksum
+
     cur = conn.execute(
         "INSERT INTO renders (moment_id, path, duration_s, tts, writer, issues,"
-        " ok, created_at) VALUES (?,?,?,?,?,?,?,?)",
+        " ok, checksum, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
         (
             moment_id, str(out_path), duration, tts.name, writer.name,
             json.dumps(issues, ensure_ascii=False), int(not issues),
-            utcnow().isoformat(),
+            file_checksum(out_path), utcnow().isoformat(),
         ),
     )
     conn.commit()
