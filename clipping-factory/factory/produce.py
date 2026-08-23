@@ -69,20 +69,38 @@ def produce_moment(
 
     media_dir = Path(media_dir)
     workdir = media_dir / f"moment-{moment_id}"
-    items = render.build_timeline(
-        Path(row["audio_path"]), row["t_start"], row["t_end"], clip_segments,
-        script, tts, row["language"], workdir,
-    )
+    source_media = Path(row["audio_path"])
 
     is_campaign = row["authorization_kind"] == "campaign" or bool(row["campaign_key"])
     badges = compliance.default_badges(is_campaign)
     credit = f"Extrait — {row['source_name']} · {row['ep_title']}"[:110]
-
     out_path = media_dir / f"moment-{moment_id}.mp4"
-    render.render_video(
-        items, workdir, out_path, credit, badges, persona_png,
-        width=width, height=height,
-    )
+
+    from . import vrender
+
+    if vrender.has_video_stream(source_media):
+        # mode vidéo : la vraie image du podcast, cartes persona animées
+        from .assets import generate_gradient, generate_persona_states
+
+        bg = generate_gradient(media_dir / "card-bg.png", width, height)
+        closed, opened = generate_persona_states(media_dir)
+        items = vrender.build_video_timeline(
+            source_media, row["t_start"], row["t_end"], clip_segments,
+            script, tts, row["language"], workdir, bg, closed, opened,
+            width=width, height=height,
+        )
+        vrender.render_video_master(
+            items, workdir, out_path, credit, badges, width=width, height=height,
+        )
+    else:
+        items = render.build_timeline(
+            source_media, row["t_start"], row["t_end"], clip_segments,
+            script, tts, row["language"], workdir,
+        )
+        render.render_video(
+            items, workdir, out_path, credit, badges, persona_png,
+            width=width, height=height,
+        )
     duration = render.probe_duration(out_path)
 
     issues = compliance.check(compliance.RenderMeta(

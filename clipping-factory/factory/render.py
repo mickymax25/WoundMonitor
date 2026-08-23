@@ -144,6 +144,22 @@ def _ass_escape(text: str) -> str:
     return text.replace("\\", "").replace("{", "(").replace("}", ")").replace("\n", " ")
 
 
+def _karaoke(text: str, duration: float) -> str:
+    """Sous-titre karaoké : timing par mot estimé au prorata de sa longueur."""
+    words = _ass_escape(text).split()
+    if not words:
+        return ""
+    total_cs = max(1, int(duration * 100))
+    weights = [len(w) + 1 for w in words]
+    scale = total_cs / sum(weights)
+    out, spent = [], 0
+    for i, (word, weight) in enumerate(zip(words, weights)):
+        cs = total_cs - spent if i == len(words) - 1 else max(1, int(weight * scale))
+        spent += cs
+        out.append(f"{{\\k{cs}}}{word}")
+    return " ".join(out)
+
+
 def write_ass(
     items: list[TimelineItem],
     offsets: list[float],
@@ -162,10 +178,10 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Clip,DejaVu Sans,{int(height * 0.037)},&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,-1,0,0,0,100,100,0,0,1,4,1,5,60,60,0,1
-Style: Reaction,DejaVu Sans,{int(height * 0.040)},&H004FC8FF,&H00FFFFFF,&H00101010,&H80000000,-1,0,0,0,100,100,0,0,1,4,1,5,60,60,0,1
-Style: Credit,DejaVu Sans,{int(height * 0.018)},&H00B4B4B4,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,40,40,40,1
-Style: Badge,DejaVu Sans,{int(height * 0.018)},&H00B4B4B4,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,2,0,8,40,40,40,1
+Style: Clip,Archivo Black,{int(height * 0.036)},&H00FFFFFF,&H009BB2B8,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,5,1,2,60,60,{int(height * 0.20)},1
+Style: Reaction,Archivo Black,{int(height * 0.040)},&H004FC8FF,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,5,1,5,60,60,0,1
+Style: Credit,Archivo,{int(height * 0.016)},&H00B4B4B4,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,40,40,36,1
+Style: Badge,Archivo,{int(height * 0.016)},&H00B4B4B4,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,2,0,8,40,40,50,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -174,9 +190,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     for item, offset in zip(items, offsets):
         style = "Reaction" if item.kind == "reaction" else "Clip"
         for start, end, text in item.captions:
+            rendered = (
+                _karaoke(text, end - start) if item.kind == "clip"
+                else _ass_escape(text)
+            )
             lines.append(
                 f"Dialogue: 0,{_ass_time(offset + start)},{_ass_time(offset + end)},"
-                f"{style},,0,0,0,,{_ass_escape(text)}\n"
+                f"{style},,0,0,0,,{rendered}\n"
             )
     if credit_text:
         lines.append(
