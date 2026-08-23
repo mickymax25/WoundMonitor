@@ -79,14 +79,11 @@ def produce_moment(
     from . import vrender
 
     if vrender.has_video_stream(source_media):
-        # mode vidéo : la vraie image du podcast, cartes persona animées
-        from .assets import generate_gradient, generate_persona_states
-
-        bg = generate_gradient(media_dir / "card-bg.png", width, height)
-        closed, opened = generate_persona_states(media_dir)
+        # mode vidéo : la vraie image du podcast se fige pendant les
+        # interventions ; persona (PNG fond vert) incrusté en bas à droite
         items = vrender.build_video_timeline(
             source_media, row["t_start"], row["t_end"], clip_segments,
-            script, tts, row["language"], workdir, bg, closed, opened,
+            script, tts, row["language"], workdir, persona_png,
             width=width, height=height,
         )
         vrender.render_video_master(

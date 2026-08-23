@@ -2,7 +2,6 @@ import subprocess
 
 import pytest
 
-from factory.assets import generate_gradient, generate_persona_states
 from factory.reaction import Interruption, ReactionScript
 from factory.render import probe_duration
 from factory.transcribe import Segment
@@ -39,10 +38,19 @@ def test_has_video_stream(tmp_path):
     assert not has_video_stream(tmp_path / "a.wav")
 
 
+def make_green_persona(path):
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (300, 300), (0, 255, 0))
+    d = ImageDraw.Draw(img)
+    d.ellipse([60, 60, 240, 240], fill=(79, 200, 255))
+    img.save(path)
+    return path
+
+
 def test_video_master_end_to_end(tmp_path):
     video = make_source_video(tmp_path / "src.mp4", 40.0)
-    bg = generate_gradient(tmp_path / "bg.png", 270, 480)
-    closed, opened = generate_persona_states(tmp_path, size=200)
+    persona = make_green_persona(tmp_path / "persona.png")
     script = ReactionScript(
         hook="Écoute ça.",
         interruptions=[Interruption(at_s=12.0, text="Stop, c'est important.")],
@@ -50,7 +58,7 @@ def test_video_master_end_to_end(tmp_path):
     )
     items = build_video_timeline(
         video, 5.0, 30.0, SEGMENTS, script, FixtureTTS(), "fr",
-        tmp_path / "work", bg, closed, opened, width=270, height=480,
+        tmp_path / "work", persona, width=270, height=480,
     )
     assert [i.kind for i in items] == ["reaction", "clip", "reaction", "clip",
                                       "reaction"]

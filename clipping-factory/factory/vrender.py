@@ -58,28 +58,45 @@ def clip_video_segment(
     return out
 
 
-def reaction_card_segment(
-    voice_wav: Path, bg_png: Path, persona_closed: Path, persona_open: Path,
+def reaction_freeze_segment(
+    src: Path, freeze_t: float, voice_wav: Path, persona_png: Path | None,
     out: Path, width: int = VIDEO_W, height: int = VIDEO_H,
 ) -> Path:
-    """Carte persona plein écran : dégradé + personnage, bouche animée 4 Hz."""
+    """Intervention du persona : la vidéo se FIGE (image du point de coupe,
+    légèrement assombrie), le persona apparaît détouré en bas à droite avec
+    un flottement subtil — aucune animation de bouche."""
     out.parent.mkdir(parents=True, exist_ok=True)
     duration = probe_duration(voice_wav)
-    pw = int(width * 0.52)
-    y = f"(H-h)/2-{int(height * 0.08)}"
+
+    # image gelée, au même cadrage que les segments d'extrait
+    freeze = out.with_suffix(".freeze.png")
+    vf = (
+        f"split[bg][fg];"
+        f"[bg]scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},gblur=sigma=24,eq=brightness=-0.08[bgb];"
+        f"[fg]scale={width}:-2[fgs];"
+        f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,eq=brightness=-0.12:saturation=0.85"
+    )
     run_ffmpeg([
-        "-loop", "1", "-i", str(bg_png),
-        "-i", str(voice_wav),
-        "-loop", "1", "-i", str(persona_closed),
-        "-loop", "1", "-i", str(persona_open),
-        "-filter_complex",
-        (
-            f"[2]scale={pw}:-1[pc];[3]scale={pw}:-1[po];"
-            f"[0][pc]overlay=(W-w)/2:{y}:enable='gte(mod(t,0.25),0.125)'[s1];"
-            f"[s1][po]overlay=(W-w)/2:{y}:enable='lt(mod(t,0.25),0.125)'"
-        ),
-        "-t", f"{duration:.3f}", *_ENC, "-shortest", str(out),
+        "-ss", f"{max(0.0, freeze_t):.3f}", "-i", str(src),
+        "-frames:v", "1", "-filter_complex", vf, str(freeze),
     ])
+
+    inputs = ["-loop", "1", "-i", str(freeze), "-i", str(voice_wav)]
+    if persona_png is not None:
+        pw = int(width * 0.38)
+        margin_y = int(height * 0.155)
+        inputs += ["-loop", "1", "-i", str(persona_png)]
+        filters = (
+            f"[2]chromakey=0x00FF00:0.20:0.06,despill=type=green,"
+            f"scale={pw}:-1[p];"
+            f"[0][p]overlay=x=W-w-20:y=H-h-{margin_y}+9*sin(2*PI*t/2.6)"
+        )
+        run_ffmpeg([*inputs, "-filter_complex", filters,
+                    "-t", f"{duration:.3f}", *_ENC, "-shortest", str(out)])
+    else:
+        run_ffmpeg([*inputs, "-t", f"{duration:.3f}", *_ENC,
+                    "-shortest", str(out)])
     return out
 
 
@@ -92,9 +109,7 @@ def build_video_timeline(
     tts,
     language: str,
     workdir: Path,
-    bg_png: Path,
-    persona_closed: Path,
-    persona_open: Path,
+    persona_png: Path | None,
     width: int = VIDEO_W,
     height: int = VIDEO_H,
 ) -> list[TimelineItem]:
@@ -105,10 +120,10 @@ def build_video_timeline(
     """
     workdir.mkdir(parents=True, exist_ok=True)
 
-    def reaction_item(text: str, tag: str) -> TimelineItem:
+    def reaction_item(text: str, tag: str, freeze_t: float) -> TimelineItem:
         wav = tts.synth(text, language, workdir / f"tts-{tag}.wav")
-        seg = reaction_card_segment(
-            wav, bg_png, persona_closed, persona_open,
+        seg = reaction_freeze_segment(
+            source_video, freeze_t, wav, persona_png,
             workdir / f"vseg-{tag}.mp4", width, height,
         )
         dur = probe_duration(seg)
@@ -128,16 +143,18 @@ def build_video_timeline(
 
     items: list[TimelineItem] = []
     if script.hook:
-        items.append(reaction_item(script.hook, "hook"))
+        items.append(reaction_item(script.hook, "hook", t_start + 0.2))
     cuts = [t_start + i.at_s for i in script.interruptions
             if 1.0 < i.at_s < (t_end - t_start) - 1.0]
     bounds = [t_start, *cuts, t_end]
     for idx in range(len(bounds) - 1):
         items.append(clip_item(bounds[idx], bounds[idx + 1], str(idx)))
         if idx < len(cuts):
-            items.append(reaction_item(script.interruptions[idx].text, f"int{idx}"))
+            items.append(reaction_item(
+                script.interruptions[idx].text, f"int{idx}", cuts[idx]
+            ))
     if script.outro:
-        items.append(reaction_item(script.outro, "outro"))
+        items.append(reaction_item(script.outro, "outro", t_end - 0.2))
     return items
 
 
