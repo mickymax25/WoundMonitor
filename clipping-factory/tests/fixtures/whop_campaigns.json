@@ -1,0 +1,62 @@
+{
+  "data": [
+    {
+      "id": "camp_fresh_ai",
+      "title": "AI Startup Launch Clips",
+      "description": "Clip our keynote and demos. TikTok + Reels + Shorts.",
+      "currency": "USD",
+      "reward_rate": 2.0,
+      "total_budget": 10000,
+      "budget_remaining": 9200,
+      "min_payout": 5,
+      "max_payout": 500,
+      "platforms": ["TikTok", "Instagram", "YouTube"],
+      "languages": ["en"],
+      "status": "active"
+    },
+    {
+      "id": "camp_drained",
+      "title": "Podcast Moments",
+      "description": "Best moments of our weekly show.",
+      "currency": "USD",
+      "reward_rate": 1.5,
+      "total_budget": 5000,
+      "budget_remaining": 900,
+      "platforms": ["tiktok"],
+      "status": "active"
+    },
+    {
+      "id": "camp_casino",
+      "title": "Casino Highlights",
+      "description": "Clip the biggest stake wins from our casino streams.",
+      "currency": "USD",
+      "reward_rate": 12.0,
+      "total_budget": 50000,
+      "budget_remaining": 48000,
+      "platforms": ["tiktok"],
+      "status": "active"
+    },
+    {
+      "id": "camp_low_cpm",
+      "title": "Budget Brand Awareness",
+      "currency": "USD",
+      "reward_rate": 0.3,
+      "total_budget": 2000,
+      "budget_remaining": 2000,
+      "platforms": ["tiktok"],
+      "status": "active"
+    },
+    {
+      "id": "camp_fr_podcast",
+      "title": "Clips podcast tech FR",
+      "description": "Clippez nos épisodes, comptes TikTok et Reels.",
+      "currency": "EUR",
+      "reward_rate": 0.6,
+      "total_budget": 1500,
+      "budget_remaining": 1400,
+      "platforms": ["tiktok", "instagram"],
+      "languages": ["fr"],
+      "status": "active"
+    }
+  ]
+}
