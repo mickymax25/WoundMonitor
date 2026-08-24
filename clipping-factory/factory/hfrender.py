@@ -50,10 +50,19 @@ def generate_composition(
     width: int,
     height: int,
 ) -> str:
+    # une seule ligne de sous-titre à l'écran : chaque fenêtre est bornée
+    # par le début de la suivante
+    clamped = []
+    ordered = sorted(captions, key=lambda c: c[0])
+    for i, (a, b, txt) in enumerate(ordered):
+        if i + 1 < len(ordered):
+            b = min(b, ordered[i + 1][0] - 0.05)
+        if b - a > 0.2:
+            clamped.append((a, b, txt))
     cap_data = [
         {"start": round(a, 3), "end": round(b, 3),
          "words": word_timings(txt, a, b)}
-        for a, b, txt in captions
+        for a, b, txt in clamped
     ]
     cue_data = [
         {"start": round(c.start, 3), "end": round(c.start + c.duration, 3),
@@ -61,8 +70,8 @@ def generate_composition(
         for c in cues
     ]
     badge_text = " · ".join(badges)
-    fs_cap = int(height * 0.036)
-    fs_cue = int(height * 0.040)
+    fs_cap = int(height * 0.034)
+    fs_cue = int(height * 0.029)
     fs_meta = int(height * 0.016)
 
     return f"""<!doctype html>
@@ -91,8 +100,8 @@ def generate_composition(
       }}
       .capline .w {{ display: inline-block; opacity: .4; margin: 0 .14em; }}
       .cueline {{
-        position: absolute; left: 7%; right: 7%; top: 12.5%;
-        text-align: center; font-size: {fs_cue}px; line-height: 1.3;
+        position: absolute; left: 9%; right: 9%; top: 11.5%;
+        text-align: center; font-size: {fs_cue}px; line-height: 1.32;
         color: #FFC84F;
         text-shadow: 0 0 16px rgba(0,0,0,.9), 3px 3px 0 #101010,
                      -3px 3px 0 #101010, 3px -3px 0 #101010, -3px -3px 0 #101010;
@@ -241,7 +250,13 @@ def render_hyperframes(
         )
     shutil.copy(mixed_mp4, project / "mixed.mp4")
     if persona_keyed_png is not None:
-        shutil.copy(persona_keyed_png, project / "persona.png")
+        # recadre sur le personnage détouré (les marges transparentes de
+        # l'image générée rendraient le persona minuscule à largeur fixe)
+        from PIL import Image
+
+        img = Image.open(persona_keyed_png).convert("RGBA")
+        bbox = img.getbbox()
+        (img.crop(bbox) if bbox else img).save(project / "persona.png")
     else:
         # pixel transparent : le persona reste simplement invisible
         from PIL import Image
