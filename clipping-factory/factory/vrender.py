@@ -192,6 +192,51 @@ def plan_voice_cues(
     return cues
 
 
+def make_mixed_master(
+    body: Path, cues: list[VoiceCue], workdir: Path,
+) -> tuple[Path, float]:
+    """Corps + mix audio complet (duck + voix), queue gelée pour l'outro.
+
+    Sortie SANS habillage graphique : c'est l'entrée commune des deux
+    finitions (ffmpeg ou HyperFrames). Renvoie (mixed.mp4, durée totale).
+    """
+    clip_dur = probe_duration(body)
+    tail = max(0.0, (cues[-1].start + cues[-1].duration + 0.4) - clip_dur) if cues else 0.0
+    total = clip_dur + tail
+    windows = [(c.start, c.start + c.duration) for c in cues]
+    enable = "+".join(f"between(t,{a:.2f},{b:.2f})" for a, b in windows) or "0"
+
+    inputs = ["-i", str(body.resolve())]
+    for cue in cues:
+        inputs += ["-i", str(cue.wav.resolve())]
+    filters = [
+        f"[0:v]tpad=stop_mode=clone:stop_duration={tail:.3f}[vout]",
+        f"[0:a]apad=pad_dur={tail:.3f},"
+        f"volume=enable='{enable}':volume={DUCK_LEVEL}[a0]",
+    ]
+    amix_in = "[a0]"
+    for j, cue in enumerate(cues):
+        delay_ms = int(cue.start * 1000)
+        filters.append(f"[{j + 1}:a]adelay={delay_ms}|{delay_ms}[v{j}]")
+        amix_in += f"[v{j}]"
+    if cues:
+        filters.append(
+            f"{amix_in}amix=inputs={len(cues) + 1}:normalize=0:duration=longest[aout]"
+        )
+    else:
+        filters.append("[0:a]anull[aout]")
+
+    mixed = workdir / "mixed.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", *inputs,
+         "-filter_complex", ";".join(filters),
+         "-map", "[vout]", "-map", "[aout]",
+         "-t", f"{total:.3f}", *_ENC, str(mixed)],
+        check=True,
+    )
+    return mixed, total
+
+
 def render_dynamic(
     body: Path,
     cues: list[VoiceCue],
@@ -204,11 +249,10 @@ def render_dynamic(
     width: int = VIDEO_W,
     height: int = VIDEO_H,
 ) -> Path:
+    """Finition ffmpeg : sous-titres ASS + persona en boucle + barre."""
+    mixed, total = make_mixed_master(body, cues, workdir)
     clip_dur = probe_duration(body)
-    tail = max(0.0, (cues[-1].start + cues[-1].duration + 0.4) - clip_dur) if cues else 0.0
-    total = clip_dur + tail
 
-    # sous-titres : extrait (karaoké, bas) + persona (haut) via pseudo-items
     items = [TimelineItem("clip", body, clip_dur, clip_captions)]
     offsets = [0.0]
     for cue in cues:
@@ -221,49 +265,20 @@ def render_dynamic(
     windows = [(c.start, c.start + c.duration) for c in cues]
     enable = "+".join(f"between(t,{a:.2f},{b:.2f})" for a, b in windows) or "0"
 
-    inputs = ["-i", body.name]
-    for cue in cues:
-        inputs += ["-i", str(cue.wav.resolve())]
+    inputs = ["-i", mixed.name]
     filters = []
-    vlast = "[base]"
-    filters.append(
-        f"[0:v]tpad=stop_mode=clone:stop_duration={tail:.3f}[base]"
-    )
+    vlast = "[0:v]"
     if persona_loop is not None and cues:
         inputs = ["-c:v", "libvpx-vp9", "-stream_loop", "-1",
-                  "-i", str(persona_loop.resolve())] + inputs
-        # l'entrée persona devient l'index 0 ; décale les références
-        filters = [f"[1:v]tpad=stop_mode=clone:stop_duration={tail:.3f}[base]"]
+                  "-i", str(persona_loop.resolve()), "-i", mixed.name]
         filters.append(
-            f"{vlast}[0:v]overlay=x=W-w-16:y=H-h-{int(height * 0.145)}"
+            f"[1:v][0:v]overlay=x=W-w-16:y=H-h-{int(height * 0.145)}"
             f":enable='{enable}':eof_action=repeat[pv]"
         )
         vlast = "[pv]"
-        audio_base, voice_base = "2", 2
+        amap = "1:a"
     else:
-        audio_base, voice_base = "1", 1  # placeholders ajustés plus bas
-
-    # audio : clip ducké sous les voix + voix décalées
-    if persona_loop is not None and cues:
-        duck_src = "[1:a]"
-        voice_inputs = list(range(2, 2 + len(cues)))
-    else:
-        duck_src = "[0:a]"
-        voice_inputs = list(range(1, 1 + len(cues)))
-    duck = (f"{duck_src}apad=pad_dur={tail:.3f},"
-            f"volume=enable='{enable}':volume={DUCK_LEVEL}[a0]")
-    filters.append(duck)
-    amix_in = "[a0]"
-    for j, (idx, cue) in enumerate(zip(voice_inputs, cues)):
-        delay_ms = int(cue.start * 1000)
-        filters.append(f"[{idx}:a]adelay={delay_ms}|{delay_ms}[v{j}]")
-        amix_in += f"[v{j}]"
-    if cues:
-        filters.append(
-            f"{amix_in}amix=inputs={len(cues) + 1}:normalize=0:duration=longest[aout]"
-        )
-    else:
-        filters.append(f"{duck_src}anull[aout]")
+        amap = "0:a"
 
     bar_h = max(6, int(height * 0.006))
     filters.append(
@@ -276,11 +291,38 @@ def render_dynamic(
     subprocess.run(
         ["ffmpeg", "-y", "-loglevel", "error", *inputs,
          "-filter_complex", ";".join(filters),
-         "-map", "[vout]", "-map", "[aout]",
+         "-map", "[vout]", "-map", amap,
          "-t", f"{total:.3f}", *_ENC, str(out_path.resolve())],
         check=True, cwd=workdir,
     )
     return out_path
+
+
+def prepare_dynamic(
+    source_video: Path,
+    t_start: float,
+    t_end: float,
+    clip_segments: list[Segment],
+    script: ReactionScript,
+    tts,
+    language: str,
+    workdir: Path,
+    width: int = VIDEO_W,
+    height: int = VIDEO_H,
+) -> tuple[Path, list[VoiceCue], list[tuple[float, float, str]]]:
+    """Étage commun aux deux finitions : corps, voix planifiées, captions."""
+    workdir.mkdir(parents=True, exist_ok=True)
+    body = build_clip_body(
+        source_video, clip_segments, t_start, t_end, workdir, width, height
+    )
+    clip_dur = probe_duration(body)
+    cues = plan_voice_cues(script, tts, language, workdir, clip_dur, t_start)
+    captions = []
+    for s in clip_segments:
+        lo, hi = max(s.start, t_start), min(s.end, t_end)
+        if hi - lo > 0.2:
+            captions.append((lo - t_start, hi - t_start, s.text))
+    return body, cues, captions
 
 
 def produce_dynamic_video(
@@ -299,27 +341,17 @@ def produce_dynamic_video(
     width: int = VIDEO_W,
     height: int = VIDEO_H,
 ) -> Path:
-    """Orchestration complète du montage dynamique."""
-    workdir.mkdir(parents=True, exist_ok=True)
-    body = build_clip_body(
-        source_video, clip_segments, t_start, t_end, workdir, width, height
+    """Orchestration complète du montage dynamique (finition ffmpeg)."""
+    body, cues, captions = prepare_dynamic(
+        source_video, t_start, t_end, clip_segments, script, tts, language,
+        workdir, width, height,
     )
-    clip_dur = probe_duration(body)
-    cues = plan_voice_cues(script, tts, language, workdir, clip_dur, t_start)
-
     loop = None
     if persona_png is not None:
         keyed = key_persona(persona_png, workdir / "persona-keyed.png")
         loop = make_persona_loop(
             keyed, workdir / "persona-loop.webm", int(width * 0.34)
         )
-
-    captions = []
-    for s in clip_segments:
-        lo, hi = max(s.start, t_start), min(s.end, t_end)
-        if hi - lo > 0.2:
-            captions.append((lo - t_start, hi - t_start, s.text))
-
     return render_dynamic(
         body, cues, captions, loop, workdir, out_path,
         credit_text, badges, width, height,

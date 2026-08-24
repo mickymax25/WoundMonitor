@@ -80,12 +80,45 @@ def produce_moment(
 
     if vrender.has_video_stream(source_media):
         # mode vidéo dynamique : extrait continu à punch-ins alternés, voix du
-        # persona par-dessus (clip ducké), persona animé incrusté bas-droite
-        vrender.produce_dynamic_video(
-            source_media, row["t_start"], row["t_end"], clip_segments,
-            script, tts, row["language"], workdir, out_path, credit, badges,
-            persona_png, width=width, height=height,
-        )
+        # persona par-dessus (clip ducké), persona animé incrusté bas-droite.
+        # Finition HyperFrames (motion design GSAP) par défaut, ffmpeg en repli.
+        import os
+
+        renderer = os.environ.get("FACTORY_RENDERER", "hyperframes")
+        if renderer == "hyperframes":
+            from . import hfrender
+
+            body, cues, captions = vrender.prepare_dynamic(
+                source_media, row["t_start"], row["t_end"], clip_segments,
+                script, tts, row["language"], workdir, width, height,
+            )
+            try:
+                keyed = (vrender.key_persona(persona_png,
+                                             workdir / "persona-keyed.png")
+                         if persona_png else None)
+                mixed, total = vrender.make_mixed_master(body, cues, workdir)
+                hfrender.render_hyperframes(
+                    mixed, total, captions, cues, keyed, workdir, out_path,
+                    credit, badges, width, height,
+                )
+            except Exception as exc:
+                print(f"⚠ finition HyperFrames indisponible ({exc}) — repli ffmpeg")
+                loop = None
+                if persona_png is not None:
+                    keyed = vrender.key_persona(
+                        persona_png, workdir / "persona-keyed.png")
+                    loop = vrender.make_persona_loop(
+                        keyed, workdir / "persona-loop.webm", int(width * 0.34))
+                vrender.render_dynamic(
+                    body, cues, captions, loop, workdir, out_path,
+                    credit, badges, width, height,
+                )
+        else:
+            vrender.produce_dynamic_video(
+                source_media, row["t_start"], row["t_end"], clip_segments,
+                script, tts, row["language"], workdir, out_path, credit, badges,
+                persona_png, width=width, height=height,
+            )
     else:
         items = render.build_timeline(
             source_media, row["t_start"], row["t_end"], clip_segments,
