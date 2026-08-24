@@ -59,11 +59,19 @@ def generate_composition(
             b = min(b, ordered[i + 1][0] - 0.05)
         if b - a > 0.2:
             clamped.append((a, b, txt))
-    cap_data = [
-        {"start": round(a, 3), "end": round(b, 3),
-         "words": word_timings(txt, a, b)}
-        for a, b, txt in clamped
-    ]
+    # lignes courtes : max ~6 mots à l'écran (une longue phrase devient
+    # plusieurs cartons successifs, chacun sur la fenêtre de ses mots)
+    MAX_WORDS = 6
+    cap_data = []
+    for a, b, txt in clamped:
+        words = word_timings(txt, a, b)
+        chunks = [words[i:i + MAX_WORDS] for i in range(0, len(words), MAX_WORDS)]
+        for j, chunk in enumerate(chunks):
+            start = a if j == 0 else chunk[0]["t"]
+            end = b if j == len(chunks) - 1 else chunks[j + 1][0]["t"] - 0.03
+            if end - start > 0.15:
+                cap_data.append({"start": round(start, 3),
+                                 "end": round(end, 3), "words": chunk})
     cue_data = [
         {"start": round(c.start, 3), "end": round(c.start + c.duration, 3),
          "text": c.text}
