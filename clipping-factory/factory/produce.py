@@ -79,15 +79,12 @@ def produce_moment(
     from . import vrender
 
     if vrender.has_video_stream(source_media):
-        # mode vidéo : la vraie image du podcast se fige pendant les
-        # interventions ; persona (PNG fond vert) incrusté en bas à droite
-        items = vrender.build_video_timeline(
+        # mode vidéo dynamique : extrait continu à punch-ins alternés, voix du
+        # persona par-dessus (clip ducké), persona animé incrusté bas-droite
+        vrender.produce_dynamic_video(
             source_media, row["t_start"], row["t_end"], clip_segments,
-            script, tts, row["language"], workdir, persona_png,
-            width=width, height=height,
-        )
-        vrender.render_video_master(
-            items, workdir, out_path, credit, badges, width=width, height=height,
+            script, tts, row["language"], workdir, out_path, credit, badges,
+            persona_png, width=width, height=height,
         )
     else:
         items = render.build_timeline(

@@ -179,7 +179,7 @@ WrapStyle: 0
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Clip,Archivo Black,{int(height * 0.036)},&H00FFFFFF,&H009BB2B8,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,5,1,2,60,60,{int(height * 0.20)},1
-Style: Reaction,Archivo Black,{int(height * 0.040)},&H004FC8FF,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,5,1,5,60,60,0,1
+Style: Reaction,Archivo Black,{int(height * 0.040)},&H004FC8FF,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,5,1,8,60,60,{int(height * 0.14)},1
 Style: Credit,Archivo,{int(height * 0.016)},&H00B4B4B4,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,40,40,36,1
 Style: Badge,Archivo,{int(height * 0.016)},&H00B4B4B4,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,2,0,8,40,40,50,1
 

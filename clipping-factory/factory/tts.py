@@ -113,29 +113,33 @@ class OpenRouterTTS:
 
                 time.sleep(2 ** attempt)
             pcm = bytearray()
-            with httpx.stream(
-                "POST", OPENROUTER_ENDPOINT,
-                headers={"Authorization": f"Bearer {self.client.api_key}",
-                         "X-Title": "Usine a Clips"},
-                json=body, timeout=300,
-            ) as resp:
-                if resp.status_code == 429 or resp.status_code >= 500:
-                    last = f"HTTP {resp.status_code}"
-                    continue
-                if resp.status_code != 200:
-                    resp.read()
-                    last = resp.text[:200]
-                    continue
-                for line in resp.iter_lines():
-                    if not line.startswith("data: ") or line == "data: [DONE]":
+            try:
+                with httpx.stream(
+                    "POST", OPENROUTER_ENDPOINT,
+                    headers={"Authorization": f"Bearer {self.client.api_key}",
+                             "X-Title": "Usine a Clips"},
+                    json=body, timeout=300,
+                ) as resp:
+                    if resp.status_code == 429 or resp.status_code >= 500:
+                        last = f"HTTP {resp.status_code}"
                         continue
-                    try:
-                        delta = json.loads(line[6:])["choices"][0].get("delta", {})
-                    except (json.JSONDecodeError, KeyError, IndexError):
+                    if resp.status_code != 200:
+                        resp.read()
+                        last = resp.text[:200]
                         continue
-                    audio = delta.get("audio")
-                    if audio and audio.get("data"):
-                        pcm += base64.b64decode(audio["data"])
+                    for line in resp.iter_lines():
+                        if not line.startswith("data: ") or line == "data: [DONE]":
+                            continue
+                        try:
+                            delta = json.loads(line[6:])["choices"][0].get("delta", {})
+                        except (json.JSONDecodeError, KeyError, IndexError):
+                            continue
+                        audio = delta.get("audio")
+                        if audio and audio.get("data"):
+                            pcm += base64.b64decode(audio["data"])
+            except httpx.HTTPError as exc:  # proxy/réseau transitoire
+                last = f"réseau: {exc}"
+                continue
             if len(pcm) < 4800:  # < 0,1 s : réponse vide
                 last = "flux audio vide"
                 continue

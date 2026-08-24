@@ -64,9 +64,11 @@ Contraintes non négociables :
   contexte, souligne une contradiction — jamais du simple hype décoratif.
 - hook : une phrase choc dite AVANT l'extrait, qui donne envie de rester,
   sans divulgâcher la chute. 12 mots max.
-- 1 à 2 interruptions : le persona COUPE l'extrait à un horodatage précis
-  (champ at_s, en secondes relatives au début de l'extrait, aligné sur les
-  horodatages fournis) pour réagir en 1-2 phrases orales.
+- 1 à 2 interventions : le persona réagit PAR-DESSUS l'extrait (l'audio de
+  l'extrait est abaissé pendant qu'il parle) à un horodatage précis (champ
+  at_s, en secondes relatives au début de l'extrait) — 1-2 phrases orales
+  qui rebondissent sur ce qui vient d'être dit, compréhensibles même si
+  l'extrait continue en dessous.
 - outro : la chute du persona + une question qui provoque les commentaires.
 - Langue de sortie : celle du transcript. Style oral, rythmé, phrases courtes.
 """
